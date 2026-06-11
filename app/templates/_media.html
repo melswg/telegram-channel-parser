@@ -1,0 +1,33 @@
+{% macro viewer(media, channel, post_id, label="Media") %}
+  {% if media %}
+    {% if media.downloaded and media.filename %}
+      {% set media_url = url_for("serve_media", channel=channel, post_id=post_id, filename=media.filename) %}
+      {% set mime = media.get("mime_type", "") %}
+      <figure class="media-viewer">
+        {% if mime.startswith("audio/") or media.type in ["voice", "audio"] %}
+          <audio controls preload="metadata" src="{{ media_url }}"></audio>
+        {% elif mime.startswith("video/") or media.type in ["video", "video_note", "animation"] %}
+          <video controls preload="metadata" src="{{ media_url }}"></video>
+        {% elif mime.startswith("image/") or media.type in ["photo", "image", "sticker"] %}
+          <a href="{{ media_url }}" target="_blank" rel="noreferrer">
+            <img loading="lazy" src="{{ media_url }}" alt="{{ label }}">
+          </a>
+        {% else %}
+          <a class="media-file-link" href="{{ media_url }}" target="_blank" rel="noreferrer">
+            Открыть {{ media.filename }}
+          </a>
+        {% endif %}
+        <figcaption>
+          {{ (media.type or label)|media_type_label }}
+          {% if media.get("duration") is not none %} · {{ media.get("duration")|media_duration }}{% endif %}
+          · {{ media.filename }}
+        </figcaption>
+      </figure>
+    {% else %}
+      <p class="media-unavailable">
+        {{ (media.type or label)|media_type_label }} не скачано.
+        {{ media.reason or "Повторите парсинг с включённым media." }}
+      </p>
+    {% endif %}
+  {% endif %}
+{% endmacro %}

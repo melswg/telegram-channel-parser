@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_media.html" import viewer with context %}
 {% block title %}@{{ post.channel }}/{{ post.post_id }} · Telegram Importer{% endblock %}
 {% block content %}
 <section class="detail-head">
@@ -25,6 +26,7 @@
     {% if post.views is not none %}<span>{{ post.views }} просмотров</span>{% endif %}
   </div>
   <div class="post-copy">{{ post.text or "Пост без текстовой части." }}</div>
+  {{ viewer(post.media, post.channel, post.post_id, post.media_type or "Media поста") }}
   {% if post.media_directory %}
   <p class="media-ready-note">Скачанные файлы этого поста находятся в папке <code>media</code> рядом с <code>post.json</code>.</p>
   {% endif %}
@@ -45,6 +47,7 @@
         {% if comment.reply_to_comment_id %}<span class="reply-badge">↳ reply to #{{ comment.reply_to_comment_id }}</span>{% endif %}
         <p>{{ comment.text or "Комментарий без текста" }}</p>
         {% if comment.has_media %}<span class="badge">{{ comment.media_type or "media" }}</span>{% endif %}
+        {{ viewer(comment.media, post.channel, post.post_id, comment.media_type or "Media комментария") }}
       </div>
     </article>
     {% else %}

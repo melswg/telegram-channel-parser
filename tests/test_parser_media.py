@@ -71,6 +71,24 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
             self.assertTrue(info["downloaded"])
             self.assertEqual(tg.client.calls, 0)
 
+    async def test_media_metadata_keeps_voice_duration(self):
+        attribute = type("AudioAttribute", (), {"duration": 83})()
+        document = type("Document", (), {"attributes": [attribute]})()
+        media = type("Media", (), {"document": document})()
+        message = type("Message", (), {"media": media})()
+
+        info, warning = await _prepare_media(
+            FakeTelegramBackend(),
+            message,
+            Path("/tmp/unused-media-test"),
+            "voice_1",
+            "voice",
+            False,
+        )
+
+        self.assertIsNone(warning)
+        self.assertEqual(info["duration"], 83.0)
+
     async def test_publication_numbers_are_counted_from_first_real_post(self):
         numbers = await _publication_numbers(
             FakeTelegramBackend(),

@@ -1,6 +1,16 @@
 import unittest
 
-from app.web import format_post_date, publication_label
+import tempfile
+from pathlib import Path
+
+from app.web import (
+    format_media_duration,
+    format_post_date,
+    media_type_label,
+    post_preview,
+    publication_label,
+    resolve_media_path,
+)
 
 
 class WebFormattingTests(unittest.TestCase):
@@ -24,6 +34,35 @@ class WebFormattingTests(unittest.TestCase):
             publication_label({"publication_number": None, "post_id": 900}),
             "Порядковый номер не рассчитан",
         )
+
+    def test_voice_preview_includes_duration_and_caption(self):
+        self.assertEqual(
+            post_preview({
+                "text": "Короткая подпись",
+                "media_type": "voice",
+                "media": {"type": "voice", "duration": 83},
+            }),
+            "Короткая подпись · Голосовое сообщение 01:23",
+        )
+
+    def test_media_duration_supports_hours(self):
+        self.assertEqual(format_media_duration(3661), "1:01:01")
+
+    def test_media_type_has_readable_label(self):
+        self.assertEqual(media_type_label("video_note"), "Видеосообщение")
+
+    def test_media_path_cannot_escape_post_directory(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as root:
+            save_dir = Path(root)
+            expected = (
+                save_dir / "example" / "42" / "media" / "voice.ogg"
+            ).resolve()
+            self.assertEqual(
+                resolve_media_path(save_dir, "example", 42, "voice.ogg"),
+                expected,
+            )
+            with self.assertRaises(ValueError):
+                resolve_media_path(save_dir, "example", 42, "../secret")
 
 
 if __name__ == "__main__":

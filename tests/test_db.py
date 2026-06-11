@@ -29,7 +29,14 @@ class WebDatabaseTests(unittest.TestCase):
             "post_id": 42,
             "publication_number": 9,
             "text": "first",
-            "has_media": False,
+            "has_media": True,
+            "media_type": "voice",
+            "media": {
+                "downloaded": True,
+                "filename": "post_42.ogg",
+                "type": "voice",
+                "duration": 83,
+            },
             "media_directory": "media",
         }
         self.db.upsert_parsed_post(post, run_id)
@@ -63,6 +70,10 @@ class WebDatabaseTests(unittest.TestCase):
         self.assertEqual(result["media_directory"], "media")
         self.assertTrue(result["comments"][0]["media"]["downloaded"])
         self.assertEqual(run["download_media"], 1)
+        self.assertEqual(
+            self.db.list_parsed_posts(limit=1)[0]["media"]["duration"],
+            83,
+        )
 
 
 if __name__ == "__main__":

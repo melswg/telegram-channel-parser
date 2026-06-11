@@ -45,7 +45,7 @@
     {% else %}
     <a class="run-row" href="/posts/{{ post.channel }}/{{ post.post_id }}">
       <span class="run-icon">P</span>
-      <span class="run-main"><strong>{{ post|publication_label }}</strong><small>{{ post.date|post_date }} · Telegram ID #{{ post.post_id }} · {{ post.text[:100] or "Без текста" }}</small></span>
+      <span class="run-main"><strong>{{ post|publication_label }}</strong><small>{{ post.date|post_date }} · Telegram ID #{{ post.post_id }} · {{ (post|post_preview)[:100] }}</small></span>
       <span class="run-count">{{ post.comments_count }} комментариев</span><span class="row-arrow">›</span>
     </a>
     {% endif %}

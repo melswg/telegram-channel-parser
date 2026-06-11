@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import mimetypes
 import os
 import re
 from contextlib import asynccontextmanager
@@ -60,8 +61,80 @@ def publication_label(post: dict) -> str:
     return "Порядковый номер не рассчитан"
 
 
+MEDIA_LABELS = {
+    "voice": "Голосовое сообщение",
+    "audio": "Аудио",
+    "video": "Видео",
+    "video_note": "Видеосообщение",
+    "animation": "Анимация",
+    "photo": "Фото",
+    "image": "Изображение",
+    "sticker": "Стикер",
+    "document": "Документ",
+    "web_preview": "Web preview",
+    "other": "Media",
+}
+
+
+def format_media_duration(value: float | int | None) -> str:
+    if value is None:
+        return ""
+    total_seconds = max(0, int(round(float(value))))
+    hours, remainder = divmod(total_seconds, 3600)
+    minutes, seconds = divmod(remainder, 60)
+    if hours:
+        return f"{hours}:{minutes:02d}:{seconds:02d}"
+    return f"{minutes:02d}:{seconds:02d}"
+
+
+def media_type_label(value: str | None) -> str:
+    if not value:
+        return "Media"
+    return MEDIA_LABELS.get(value, str(value))
+
+
+def media_description(post: dict) -> str:
+    media = post.get("media") or {}
+    media_type = media.get("type") or post.get("media_type")
+    if not media_type:
+        return ""
+    label = media_type_label(media_type)
+    duration = format_media_duration(media.get("duration"))
+    if duration:
+        return f"{label} {duration}"
+    return label
+
+
+def post_preview(post: dict) -> str:
+    text = " ".join(str(post.get("text") or "").split())
+    media_text = media_description(post)
+    if text and media_text:
+        return f"{text} · {media_text}"
+    return text or media_text or "Публикация без текста"
+
+
+def resolve_media_path(
+    save_dir: Path,
+    channel: str,
+    post_id: int,
+    filename: str,
+) -> Path:
+    if not re.fullmatch(r"[A-Za-z0-9_.-]+", channel):
+        raise ValueError("Некорректное имя канала.")
+    if Path(filename).name != filename or filename in {"", ".", ".."}:
+        raise ValueError("Некорректное имя media-файла.")
+    media_dir = (save_dir / channel / str(post_id) / "media").resolve()
+    path = (media_dir / filename).resolve()
+    if path.parent != media_dir:
+        raise ValueError("Media-файл находится вне разрешённой папки.")
+    return path
+
+
 templates.env.filters["post_date"] = format_post_date
 templates.env.filters["publication_label"] = publication_label
+templates.env.filters["post_preview"] = post_preview
+templates.env.filters["media_duration"] = format_media_duration
+templates.env.filters["media_type_label"] = media_type_label
 
 
 def open_db() -> Database:
@@ -241,6 +314,34 @@ async def settings_page(request: Request):
         name="settings.html",
         context=template_context(request, settings=LocalSettings.load_effective().public_dict()),
     )
+
+
+@app.get("/media/{channel}/{post_id}/{filename}", name="serve_media")
+async def serve_media(channel: str, post_id: int, filename: str):
+    settings = LocalSettings.load_effective()
+    try:
+        path = resolve_media_path(
+            validate_save_dir(settings.save_dir, create=False),
+            channel,
+            post_id,
+            filename,
+        )
+    except ValueError as exc:
+        raise api_error(exc) from exc
+    if not path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Media-файл не найден. Почему: файл не скачивался, был перемещён "
+                "или удалён. Что сделать: повторите парсинг с включённым media."
+            ),
+        )
+    response = FileResponse(
+        path,
+        media_type=mimetypes.guess_type(path.name)[0] or "application/octet-stream",
+    )
+    response.headers["Cache-Control"] = "private, max-age=3600"
+    return response
 
 
 @app.get("/posts/{channel}/{post_id}", response_class=HTMLResponse)

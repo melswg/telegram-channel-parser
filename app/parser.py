@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import json
+import mimetypes
 from pathlib import Path
 from typing import Any
 
@@ -143,6 +144,16 @@ def _existing_media_file(media_dir: Path, stem: str) -> Path | None:
     return sorted(candidates)[0] if candidates else None
 
 
+def _media_duration(msg) -> float | None:
+    media = getattr(msg, "media", None)
+    document = getattr(media, "document", None)
+    for attribute in getattr(document, "attributes", []) or []:
+        duration = getattr(attribute, "duration", None)
+        if duration is not None:
+            return float(duration)
+    return None
+
+
 async def _prepare_media(
     tg: TelegramBackend,
     msg,
@@ -154,6 +165,7 @@ async def _prepare_media(
     info: dict[str, Any] = {
         "type": media_type or "other",
         "downloaded": False,
+        "duration": _media_duration(msg),
     }
     existing = _existing_media_file(media_dir, stem)
     if existing:
@@ -162,6 +174,7 @@ async def _prepare_media(
             "filename": existing.name,
             "path": f"media/{existing.name}",
             "size": existing.stat().st_size,
+            "mime_type": mimetypes.guess_type(existing.name)[0] or "",
         })
         return info, None
     if not should_download:
@@ -204,6 +217,7 @@ async def _prepare_media(
         "filename": path.name,
         "path": f"media/{path.name}",
         "size": path.stat().st_size,
+        "mime_type": mimetypes.guess_type(path.name)[0] or "",
     })
     return info, None
 

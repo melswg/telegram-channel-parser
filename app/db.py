@@ -225,11 +225,11 @@ class Database:
             return None
         result = dict(row)
         result["warnings"] = json.loads(result.pop("warnings_json") or "[]")
-        result["posts"] = [
-            dict(item) for item in self.conn.execute("""
+        result["posts"] = []
+        for item in self.conn.execute("""
                 SELECT rp.channel, rp.post_id, rp.error, p.date, p.text,
                        p.channel_title, p.publication_number,
-                       p.has_media, p.media_type,
+                       p.has_media, p.media_type, p.raw_json,
                        (SELECT COUNT(*) FROM parsed_comments c
                         WHERE c.channel = rp.channel AND c.post_id = rp.post_id) AS comments_count
                 FROM parse_run_posts rp
@@ -237,8 +237,14 @@ class Database:
                   ON p.channel = rp.channel AND p.post_id = rp.post_id
                 WHERE rp.run_id = ?
                 ORDER BY rp.post_id DESC
-            """, (run_id,)).fetchall()
-        ]
+            """, (run_id,)).fetchall():
+            post = dict(item)
+            try:
+                raw_post = json.loads(post.pop("raw_json") or "{}")
+            except (TypeError, ValueError):
+                raw_post = {}
+            post["media"] = raw_post.get("media")
+            result["posts"].append(post)
         return result
 
     def list_parse_runs(self, limit: int = 30) -> list[dict]:
@@ -366,7 +372,16 @@ class Database:
             ORDER BY p.updated_at DESC
             LIMIT ?
         """, params).fetchall()
-        return [dict(row) for row in rows]
+        results = []
+        for row in rows:
+            post = dict(row)
+            try:
+                raw_post = json.loads(post.get("raw_json") or "{}")
+            except (TypeError, ValueError):
+                raw_post = {}
+            post["media"] = raw_post.get("media")
+            results.append(post)
+        return results
 
     def close(self):
         if self.conn:
