@@ -172,6 +172,10 @@ a.run-row:hover { background: rgba(255,255,255,.025); }
 .page-head h1 { font-size: 44px; margin-bottom: 15px; }
 .settings-grid { display: grid; grid-template-columns: minmax(300px, .82fr) minmax(0, 1.18fr); gap: 16px; align-items: start; }
 .settings-grid form { display: grid; gap: 14px; }
+.settings-credentials { grid-column: 1; grid-row: 1 / span 2; align-self: stretch; }
+.storage-settings-card { grid-column: 2; grid-row: 1; align-self: stretch; }
+.security-settings-card { grid-column: 2; grid-row: 2; align-self: stretch; }
+.session-card { grid-column: 1 / -1; grid-row: 3; }
 .key-values { margin: 22px 0; }
 .key-values div, .key-values button { display: flex; justify-content: space-between; gap: 20px; padding: 11px 0; border-bottom: 1px solid var(--line); }
 .key-values dt, .secret-label { color: var(--muted); }
@@ -322,6 +326,13 @@ footer { padding: 25px; border-top: 1px solid var(--line); color: #555a64; text-
   .hero { display: block; }
   .status-card { margin-top: 30px; min-width: 0; }
   .grid-main, .settings-grid, .overview-grid { grid-template-columns: 1fr; }
+  .settings-credentials,
+  .storage-settings-card,
+  .security-settings-card,
+  .session-card {
+    grid-column: 1;
+    grid-row: auto;
+  }
   .post-grid { grid-template-columns: 1fr; }
   .run-row { grid-template-columns: auto 1fr auto; }
   .run-count, .run-row .status-badge { display: none; }
