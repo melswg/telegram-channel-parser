@@ -255,7 +255,6 @@ if (parseForm) {
         body: JSON.stringify({
           url: urlInput.value,
           limit: Number($("#parse-limit").value || 10),
-          confirm_large: $("#confirm-large").checked,
           download_media: $("#download-media").checked,
         }),
       });

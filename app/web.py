@@ -162,7 +162,6 @@ class ResetPayload(BaseModel):
 class ParsePayload(BaseModel):
     url: str
     limit: int = Field(default=10, ge=1, le=200)
-    confirm_large: bool = False
     download_media: bool = False
 
 
@@ -413,15 +412,6 @@ async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None)
             detail=f"Этот endpoint принимает только цель типа {required_kind}.",
         )
     limit = 1 if target.kind == "post" else payload.limit
-    if limit > 50 and not payload.confirm_large:
-        raise HTTPException(
-            status_code=409,
-            detail=(
-                "Импорт не запущен. Почему: лимит больше 50 повышает нагрузку "
-                "на Telegram. Что сделать: уменьшите лимит или включите явное "
-                "подтверждение."
-            ),
-        )
 
     db = open_db()
     try:
