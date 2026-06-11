@@ -60,6 +60,12 @@ def api_error(exc: Exception, status_code: int = 400) -> HTTPException:
     return HTTPException(status_code=status_code, detail=str(exc))
 
 
+def post_back_target(post: dict, run: dict | None) -> tuple[str, str]:
+    if run and run.get("target_type") == "channel":
+        return f"/runs/{run['id']}", "← К постам канала"
+    return "/", "← Назад к парсингу"
+
+
 def _track_task(task: asyncio.Task) -> None:
     running_tasks.add(task)
     task.add_done_callback(running_tasks.discard)
@@ -221,14 +227,25 @@ async def post_page(request: Request, channel: str, post_id: int):
     db = open_db()
     try:
         post = db.get_parsed_post(channel, post_id)
+        run = (
+            db.get_parse_run(post["last_run_id"])
+            if post and post.get("last_run_id")
+            else None
+        )
     finally:
         db.close()
     if not post:
         raise HTTPException(status_code=404, detail="Пост не найден в локальной истории.")
+    back_url, back_label = post_back_target(post, run)
     return templates.TemplateResponse(
         request=request,
         name="post.html",
-        context=template_context(request, post=post),
+        context=template_context(
+            request,
+            post=post,
+            back_url=back_url,
+            back_label=back_label,
+        ),
     )
 
 

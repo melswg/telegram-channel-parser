@@ -3,7 +3,7 @@
 {% block content %}
 <section class="detail-head">
   <div>
-    <a class="back-link" href="/">← Назад</a>
+    <a class="back-link" href="{{ back_url }}">{{ back_label }}</a>
     <span class="eyebrow">@{{ post.channel }} · POST #{{ post.post_id }}</span>
     <h1>{{ post.channel_title or ("@" ~ post.channel) }}</h1>
   </div>
