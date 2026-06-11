@@ -1,0 +1,8 @@
+# Telegram Comments Importer
+telethon>=1.38
+cryptg>=0.4
+python-dotenv>=1.0
+typer>=0.15
+rich>=13.0
+faster-whisper>=1.1
+tqdm>=4.66
