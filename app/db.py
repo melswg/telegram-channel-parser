@@ -307,6 +307,7 @@ class Database:
                 raw_post = {}
             post["media"] = raw_post.get("media")
             result["posts"].append(post)
+        result["observed_processed_posts"] = len(result["posts"])
         return result
 
     def list_parse_runs(self, limit: int = 30) -> list[dict]:

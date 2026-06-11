@@ -117,7 +117,11 @@ def estimate_remaining_seconds(
     run: dict,
     current_time: datetime | None = None,
 ) -> int | None:
-    processed = int(run.get("processed_posts") or 0)
+    processed = max(
+        int(run.get("processed_posts") or 0),
+        int(run.get("posts_count") or 0),
+        int(run.get("observed_processed_posts") or 0),
+    )
     total = int(run.get("total_posts") or 0)
     if run.get("status") not in {"running", "paused"}:
         return 0 if run.get("status") in {"success", "partial"} else None
@@ -151,6 +155,11 @@ def format_wait_time(seconds: int | None) -> str:
 
 
 def enrich_run_estimate(run: dict) -> dict:
+    run["processed_posts"] = max(
+        int(run.get("processed_posts") or 0),
+        int(run.get("posts_count") or 0),
+        int(run.get("observed_processed_posts") or 0),
+    )
     remaining = estimate_remaining_seconds(run)
     run["estimated_remaining_seconds"] = remaining
     status = run.get("status")

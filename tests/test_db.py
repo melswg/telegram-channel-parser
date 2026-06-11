@@ -70,6 +70,7 @@ class WebDatabaseTests(unittest.TestCase):
         self.assertEqual(result["media_directory"], "media")
         self.assertTrue(result["comments"][0]["media"]["downloaded"])
         self.assertEqual(run["download_media"], 1)
+        self.assertEqual(run["observed_processed_posts"], 1)
         self.assertEqual(
             self.db.list_parsed_posts(limit=1)[0]["media"]["duration"],
             83,

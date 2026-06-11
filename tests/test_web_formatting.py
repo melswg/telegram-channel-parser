@@ -78,6 +78,23 @@ class WebFormattingTests(unittest.TestCase):
             "total_posts": 10,
         }))
 
+    def test_wait_estimate_uses_persisted_posts_when_counter_lags(self):
+        run = {
+            "status": "running",
+            "started_at": "2026-06-12T10:00:00+00:00",
+            "processed_posts": 0,
+            "posts_count": 2,
+            "observed_processed_posts": 2,
+            "total_posts": 10,
+        }
+        self.assertEqual(
+            estimate_remaining_seconds(
+                run,
+                datetime(2026, 6, 12, 10, 2, tzinfo=timezone.utc),
+            ),
+            480,
+        )
+
     def test_media_path_cannot_escape_post_directory(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as root:
             save_dir = Path(root)
