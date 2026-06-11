@@ -13,7 +13,7 @@
     <div class="export-buttons">
       <a data-export-link href="/api/export/post/{{ post.channel }}:{{ post.post_id }}?format=json">JSON</a>
       <a data-export-link href="/api/export/post/{{ post.channel }}:{{ post.post_id }}?format=jsonl">JSONL</a>
-      <a data-export-link href="/api/export/post/{{ post.channel }}:{{ post.post_id }}?format=csv">CSV</a>
+      {# CSV временно скрыт до исправления совместимости экспорта. #}
     </div>
     <small>С media будет скачан ZIP: данные и папка <code>media</code>.</small>
     <p class="export-message form-message"></p>
