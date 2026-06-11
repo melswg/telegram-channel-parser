@@ -30,6 +30,79 @@ def friendly_telegram_error(exc: Exception) -> str:
     return f"Не удалось получить данные Telegram: {type(exc).__name__}"
 
 
+def build_parse_preview(
+    target: TelegramTarget,
+    total_posts: int,
+    requested_limit: int | None,
+    download_media: bool,
+) -> dict[str, Any]:
+    selected_posts = (
+        1
+        if target.kind == "post"
+        else total_posts if requested_limit is None else min(total_posts, requested_limit)
+    )
+    media_state = "включены" if download_media else "выключены"
+    if selected_posts % 10 == 1 and selected_posts % 100 != 11:
+        noun = "публикация"
+    elif selected_posts % 10 in {2, 3, 4} and selected_posts % 100 not in {12, 13, 14}:
+        noun = "публикации"
+    else:
+        noun = "публикаций"
+    return {
+        "available_posts": total_posts,
+        "posts_count": selected_posts,
+        "all_posts": target.kind == "channel" and requested_limit is None,
+        "download_media": download_media,
+        "confirmation": (
+            f"Будет загружено {selected_posts} {noun}. "
+            f"Media {media_state}. Вы согласны?"
+        ),
+    }
+
+
+async def preview_parse(
+    target: TelegramTarget,
+    limit: int | None,
+    download_media: bool,
+) -> dict[str, Any]:
+    """Count available posts before the user confirms a parse run."""
+    settings = LocalSettings.load_effective()
+    if not settings.configured:
+        raise ValueError("Сначала настройте api_id и api_hash.")
+    config = Config(
+        api_id=int(settings.api_id),
+        api_hash=settings.api_hash,
+        session_name=settings.session_path,
+    )
+    tg = TelegramBackend(config.api_id, config.api_hash, config.session_name)
+    try:
+        await tg.connect()
+        entity, _ = await tg.resolve_channel(target.telegram_identifier)
+        if target.kind == "post":
+            message = await tg.client.get_messages(entity, ids=target.post_id)
+            if not message or not getattr(message, "id", None):
+                raise ValueError(
+                    f"Пост {target.canonical_url} не найден или недоступен."
+                )
+            total_posts = 1
+        else:
+            total_posts = 0
+            async for _ in tg.iter_posts(entity):
+                total_posts += 1
+        return build_parse_preview(
+            target,
+            total_posts,
+            limit,
+            download_media,
+        )
+    except Exception as exc:
+        if isinstance(exc, ValueError):
+            raise
+        raise ValueError(friendly_telegram_error(exc)) from exc
+    finally:
+        await tg.stop()
+
+
 def _media_metadata(tg: TelegramBackend, msg) -> tuple[bool, str | None]:
     has_voice, media_type = tg._detect_media_type(msg)
     if has_voice and media_type:
@@ -253,7 +326,7 @@ async def _parse_message(
 async def execute_parse_run(
     run_id: int,
     target: TelegramTarget,
-    limit: int = 10,
+    limit: int | None = 10,
     db_path: str = "db.sqlite3",
     download_media: bool = False,
 ) -> dict:
@@ -290,11 +363,17 @@ async def execute_parse_run(
         else:
             messages = [msg async for msg in tg.iter_posts(entity, limit=limit)]
 
-        publication_numbers = await _publication_numbers(
-            tg,
-            entity,
-            {msg.id for msg in messages},
-        )
+        if target.kind == "channel" and limit is None:
+            publication_numbers = {
+                msg.id: position
+                for position, msg in enumerate(reversed(messages), start=1)
+            }
+        else:
+            publication_numbers = await _publication_numbers(
+                tg,
+                entity,
+                {msg.id for msg in messages},
+            )
         db.update_parse_run(run_id, total_posts=len(messages))
         for index, msg in enumerate(messages, start=1):
             try:

@@ -2,7 +2,12 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.parser import _prepare_media, _publication_numbers
+from app.parser import (
+    _prepare_media,
+    _publication_numbers,
+    build_parse_preview,
+)
+from app.targets import TelegramTarget
 
 
 class FakeDownloadClient:
@@ -73,6 +78,29 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
             {8, 23, 42},
         )
         self.assertEqual(numbers, {8: 2, 23: 5, 42: 6})
+
+    def test_empty_limit_previews_all_available_posts(self):
+        preview = build_parse_preview(
+            TelegramTarget(kind="channel", channel="example"),
+            total_posts=843,
+            requested_limit=None,
+            download_media=True,
+        )
+        self.assertEqual(preview["posts_count"], 843)
+        self.assertTrue(preview["all_posts"])
+        self.assertEqual(
+            preview["confirmation"],
+            "Будет загружено 843 публикации. Media включены. Вы согласны?",
+        )
+
+    def test_explicit_limit_is_not_capped_at_200(self):
+        preview = build_parse_preview(
+            TelegramTarget(kind="channel", channel="example"),
+            total_posts=5000,
+            requested_limit=1200,
+            download_media=False,
+        )
+        self.assertEqual(preview["posts_count"], 1200)
 
 
 if __name__ == "__main__":

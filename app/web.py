@@ -27,7 +27,7 @@ from .auth import TelegramAuthManager
 from .db import Database
 from .local_settings import LocalSettings, PROJECT_ROOT, validate_save_dir
 from .models import now_iso
-from .parser import execute_parse_run
+from .parser import execute_parse_run, preview_parse
 from .targets import TelegramTarget, parse_telegram_target
 from .web_exports import render_export, render_export_archive
 
@@ -96,7 +96,7 @@ def _track_task(task: asyncio.Task) -> None:
 async def _run_queued_parse(
     run_id: int,
     target: TelegramTarget,
-    limit: int,
+    limit: int | None,
     download_media: bool,
 ) -> None:
     async with parse_lock:
@@ -183,7 +183,7 @@ class ResetPayload(BaseModel):
 
 class ParsePayload(BaseModel):
     url: str
-    limit: int = Field(default=10, ge=1, le=200)
+    limit: int | None = Field(default=10, ge=1)
     download_media: bool = False
 
 
@@ -439,7 +439,7 @@ async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None)
     try:
         run_id = db.create_parse_run(
             target.canonical_url, target.kind, target.channel,
-            total_posts=limit if target.kind == "channel" else 1,
+            total_posts=(limit or 0) if target.kind == "channel" else 1,
             download_media=payload.download_media,
         )
     finally:
@@ -456,6 +456,16 @@ async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None)
         "download_media": payload.download_media,
         "detail_url": f"/runs/{run_id}",
     }
+
+
+@app.post("/api/parse/preview")
+async def preview_parse_target(payload: ParsePayload):
+    try:
+        target = parse_telegram_target(payload.url)
+        limit = 1 if target.kind == "post" else payload.limit
+        return await preview_parse(target, limit, payload.download_media)
+    except ValueError as exc:
+        raise api_error(exc) from exc
 
 
 @app.post("/api/parse", status_code=202)

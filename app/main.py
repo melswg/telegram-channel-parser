@@ -141,7 +141,7 @@ def sync(
 def _parse_target_cli(
     url: str,
     expected_kind: str,
-    limit: int = 10,
+    limit: Optional[int] = 10,
     download_media: bool = False,
 ):
     cfg = get_config()
@@ -165,7 +165,7 @@ def _parse_target_cli(
     try:
         run_id = db.create_parse_run(
             target.canonical_url, target.kind, target.channel,
-            total_posts=1 if target.kind == "post" else limit,
+            total_posts=1 if target.kind == "post" else (limit or 0),
             download_media=download_media,
         )
     finally:
@@ -206,27 +206,17 @@ def parse_post_command(
 @app.command(name="parse-channel")
 def parse_channel_command(
     url: str = typer.Argument(..., help="Ссылка вида https://t.me/channel"),
-    limit: int = typer.Option(
-        10, "--limit", "-l", min=1, max=200,
-        help="Последних постов; рекомендуется не больше 50",
-    ),
-    allow_large: bool = typer.Option(
-        False, "--allow-large",
-        help="Явно разрешить лимит больше 50",
+    limit: Optional[int] = typer.Option(
+        None, "--limit", "-l", min=1,
+        help="Последних постов; без параметра загружаются все",
     ),
     media: bool = typer.Option(
         False, "--media", help="Скачать media постов и комментариев"
     ),
     verbose: bool = typer.Option(False, "--verbose", "-v", help="Подробный вывод"),
 ):
-    """Распарсить последние посты канала и их комментарии."""
+    """Распарсить публикации канала и их комментарии."""
     setup_logging(verbose)
-    if limit > 50 and not allow_large:
-        console.print(
-            "[yellow]Лимит больше 50 требует --allow-large. "
-            "Для обычного запуска рекомендуется 10–50 постов.[/yellow]"
-        )
-        raise typer.Exit(1)
     _parse_target_cli(
         url,
         expected_kind="channel",

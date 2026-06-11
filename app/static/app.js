@@ -248,15 +248,27 @@ if (parseForm) {
   parseForm.addEventListener("submit", async (event) => {
     event.preventDefault();
     busy(parseForm, true);
-    message(parseForm, "Создаём локальный запуск…");
+    message(parseForm, "Считаем доступные публикации в Telegram…");
     try {
+      const rawLimit = $("#parse-limit").value.trim();
+      const payload = {
+        url: urlInput.value,
+        limit: rawLimit ? Number(rawLimit) : null,
+        download_media: $("#download-media").checked,
+      };
+      const preview = await api("/api/parse/preview", {
+        method: "POST",
+        body: JSON.stringify(payload),
+      });
+      if (!confirm(preview.confirmation)) {
+        message(parseForm, "Запуск отменён. Данные не загружались.");
+        busy(parseForm, false);
+        return;
+      }
+      message(parseForm, "Создаём локальный запуск…");
       const result = await api("/api/parse", {
         method: "POST",
-        body: JSON.stringify({
-          url: urlInput.value,
-          limit: Number($("#parse-limit").value || 10),
-          download_media: $("#download-media").checked,
-        }),
+        body: JSON.stringify(payload),
       });
       location.href = result.detail_url;
     } catch (error) {
