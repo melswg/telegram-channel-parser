@@ -4,7 +4,7 @@
 <section class="detail-head">
   <div>
     <a class="back-link" href="{{ back_url }}">{{ back_label }}</a>
-    <span class="eyebrow">@{{ post.channel }} · POST #{{ post.post_id }}</span>
+    <span class="eyebrow">@{{ post.channel }} · {{ post|publication_label }} · TELEGRAM ID #{{ post.post_id }}</span>
     <h1>{{ post.channel_title or ("@" ~ post.channel) }}</h1>
   </div>
   <div class="export-panel">

@@ -53,7 +53,15 @@ def format_post_date(value: str | None) -> str:
     return parsed.strftime("%d.%m.%Y, %H:%M")
 
 
+def publication_label(post: dict) -> str:
+    number = post.get("publication_number")
+    if number:
+        return f"Публикация №{number}"
+    return "Порядковый номер не рассчитан"
+
+
 templates.env.filters["post_date"] = format_post_date
+templates.env.filters["publication_label"] = publication_label
 
 
 def open_db() -> Database:

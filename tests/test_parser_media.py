@@ -2,7 +2,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from app.parser import _prepare_media
+from app.parser import _prepare_media, _publication_numbers
 
 
 class FakeDownloadClient:
@@ -19,6 +19,11 @@ class FakeDownloadClient:
 class FakeTelegramBackend:
     def __init__(self):
         self.client = FakeDownloadClient()
+
+    async def iter_posts(self, _entity, reverse=False):
+        assert reverse is True
+        for message_id in (4, 8, 15, 16, 23, 42):
+            yield type("Message", (), {"id": message_id})()
 
 
 class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
@@ -60,6 +65,14 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
             self.assertIsNone(warning)
             self.assertTrue(info["downloaded"])
             self.assertEqual(tg.client.calls, 0)
+
+    async def test_publication_numbers_are_counted_from_first_real_post(self):
+        numbers = await _publication_numbers(
+            FakeTelegramBackend(),
+            object(),
+            {8, 23, 42},
+        )
+        self.assertEqual(numbers, {8: 2, 23: 5, 42: 6})
 
 
 if __name__ == "__main__":

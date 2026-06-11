@@ -41,11 +41,11 @@
   <div id="run-post-list" class="run-list">
     {% for post in run.posts %}
     {% if post.error %}
-    <div class="run-row error-row"><span class="run-icon">!</span><span class="run-main"><strong>Пост #{{ post.post_id }}</strong><small>{{ post.error }}</small></span></div>
+    <div class="run-row error-row"><span class="run-icon">!</span><span class="run-main"><strong>Telegram ID #{{ post.post_id }}</strong><small>{{ post.error }}</small></span></div>
     {% else %}
     <a class="run-row" href="/posts/{{ post.channel }}/{{ post.post_id }}">
       <span class="run-icon">P</span>
-      <span class="run-main"><strong>Пост #{{ post.post_id }}</strong><small>{{ post.date|post_date }} · {{ post.text[:100] or "Без текста" }}</small></span>
+      <span class="run-main"><strong>{{ post|publication_label }}</strong><small>{{ post.date|post_date }} · Telegram ID #{{ post.post_id }} · {{ post.text[:100] or "Без текста" }}</small></span>
       <span class="run-count">{{ post.comments_count }} комментариев</span><span class="row-arrow">›</span>
     </a>
     {% endif %}

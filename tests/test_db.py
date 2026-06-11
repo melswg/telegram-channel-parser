@@ -27,6 +27,7 @@ class WebDatabaseTests(unittest.TestCase):
             "channel": "example",
             "channel_title": "Example",
             "post_id": 42,
+            "publication_number": 9,
             "text": "first",
             "has_media": False,
             "media_directory": "media",
@@ -56,6 +57,7 @@ class WebDatabaseTests(unittest.TestCase):
         result = self.db.get_parsed_post("example", 42)
         run = self.db.get_parse_run(run_id)
         self.assertEqual(result["text"], "updated")
+        self.assertEqual(result["publication_number"], 9)
         self.assertEqual(result["comments_count"], 1)
         self.assertEqual(result["comments"][0]["text"], "edited")
         self.assertEqual(result["media_directory"], "media")

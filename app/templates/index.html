@@ -89,7 +89,7 @@
     <a class="mini-post" href="/posts/{{ post.channel }}/{{ post.post_id }}">
       <span class="badge">@{{ post.channel }}</span>
       <h3>{{ post.text[:110] or "Пост без текста" }}{% if post.text|length > 110 %}…{% endif %}</h3>
-      <small>#{{ post.post_id }} · {{ post.date|post_date }} · {{ post.comments_count }} комментариев</small>
+      <small>{{ post|publication_label }} · {{ post.date|post_date }} · {{ post.comments_count }} комментариев</small>
     </a>
     {% endfor %}
   </div>

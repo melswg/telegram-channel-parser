@@ -103,6 +103,7 @@ CREATE TABLE IF NOT EXISTS parsed_posts (
     channel         TEXT NOT NULL,
     channel_title   TEXT DEFAULT '',
     post_id         INTEGER NOT NULL,
+    publication_number INTEGER,
     date            TEXT DEFAULT '',
     text            TEXT DEFAULT '',
     views           INTEGER,
@@ -168,6 +169,9 @@ class Database:
         self._ensure_column(
             "parse_runs", "media_files_count", "INTEGER DEFAULT 0"
         )
+        self._ensure_column(
+            "parsed_posts", "publication_number", "INTEGER"
+        )
         self.conn.commit()
 
     def _ensure_column(self, table: str, column: str, definition: str) -> None:
@@ -224,7 +228,8 @@ class Database:
         result["posts"] = [
             dict(item) for item in self.conn.execute("""
                 SELECT rp.channel, rp.post_id, rp.error, p.date, p.text,
-                       p.channel_title, p.has_media, p.media_type,
+                       p.channel_title, p.publication_number,
+                       p.has_media, p.media_type,
                        (SELECT COUNT(*) FROM parsed_comments c
                         WHERE c.channel = rp.channel AND c.post_id = rp.post_id) AS comments_count
                 FROM parse_run_posts rp
@@ -245,11 +250,13 @@ class Database:
     def upsert_parsed_post(self, data: dict, run_id: int) -> None:
         self.conn.execute("""
             INSERT INTO parsed_posts (
-                channel, channel_title, post_id, date, text, views, forwards,
-                has_media, media_type, raw_json, last_run_id, updated_at
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                channel, channel_title, post_id, publication_number, date,
+                text, views, forwards, has_media, media_type, raw_json,
+                last_run_id, updated_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             ON CONFLICT(channel, post_id) DO UPDATE SET
                 channel_title = excluded.channel_title,
+                publication_number = excluded.publication_number,
                 date = excluded.date,
                 text = excluded.text,
                 views = excluded.views,
@@ -261,10 +268,10 @@ class Database:
                 updated_at = excluded.updated_at
         """, (
             data["channel"], data.get("channel_title", ""), data["post_id"],
-            data.get("date", ""), data.get("text", ""), data.get("views"),
-            data.get("forwards"), int(bool(data.get("has_media"))),
-            data.get("media_type"), json.dumps(data, ensure_ascii=False, default=str),
-            run_id, now_iso(),
+            data.get("publication_number"), data.get("date", ""),
+            data.get("text", ""), data.get("views"), data.get("forwards"),
+            int(bool(data.get("has_media"))), data.get("media_type"),
+            json.dumps(data, ensure_ascii=False, default=str), run_id, now_iso(),
         ))
         self.conn.execute("""
             INSERT INTO parse_run_posts (run_id, channel, post_id, error)

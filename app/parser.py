@@ -135,6 +135,25 @@ async def _prepare_media(
     return info, None
 
 
+async def _publication_numbers(
+    tg: TelegramBackend,
+    entity,
+    message_ids: set[int],
+) -> dict[int, int]:
+    """Return exact chronological positions among existing channel posts."""
+    if not message_ids:
+        return {}
+    numbers: dict[int, int] = {}
+    position = 0
+    async for historical in tg.iter_posts(entity, reverse=True):
+        position += 1
+        if historical.id in message_ids:
+            numbers[historical.id] = position
+            if len(numbers) == len(message_ids):
+                break
+    return numbers
+
+
 async def _parse_message(
     tg: TelegramBackend,
     db: Database,
@@ -146,6 +165,7 @@ async def _parse_message(
     save_dir: Path,
     target: TelegramTarget,
     download_media: bool,
+    publication_number: int | None,
 ) -> tuple[dict, Path, list[str], int]:
     post = tg.message_to_post(msg, channel_db_id)
     db.upsert_post(post)
@@ -209,6 +229,7 @@ async def _parse_message(
         "channel": channel_model.username,
         "channel_title": channel_model.title,
         "post_id": msg.id,
+        "publication_number": publication_number,
         "url": target.post_url(msg.id),
         "date": msg.date.isoformat() if msg.date else "",
         "text": msg.message or "",
@@ -269,12 +290,18 @@ async def execute_parse_run(
         else:
             messages = [msg async for msg in tg.iter_posts(entity, limit=limit)]
 
+        publication_numbers = await _publication_numbers(
+            tg,
+            entity,
+            {msg.id for msg in messages},
+        )
         db.update_parse_run(run_id, total_posts=len(messages))
         for index, msg in enumerate(messages, start=1):
             try:
                 parsed, post_path, media_warnings, post_media_count = await _parse_message(
                     tg, db, entity, channel_model, channel_db_id,
                     msg, run_id, save_dir, target, download_media,
+                    publication_numbers.get(msg.id),
                 )
                 posts.append(parsed)
                 warnings.extend(media_warnings)
