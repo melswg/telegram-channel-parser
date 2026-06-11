@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}Настройки · Telegram Importer{% endblock %}
+{% block content %}
+<section class="page-head">
+  <span class="eyebrow">LOCAL SETTINGS</span>
+  <h1>Настройки приложения</h1>
+  <p>Здесь нет настроек общего сервера: всё относится только к этой локальной копии.</p>
+</section>
+<div class="settings-grid">
+  <article class="card settings-credentials">
+    <div class="card-heading">
+      <h2>Локальные данные Telegram</h2>
+      <span class="status-badge">{{ "saved" if settings.configured else "missing" }}</span>
+    </div>
+    <p>Значения скрыты по умолчанию. Они раскрываются только в этом локальном браузере.</p>
+    <div class="key-values secret-values">
+      <button type="button" data-secret-key="api_id"><span class="secret-label">api_id</span><span class="secret-content">••••••••</span></button>
+      <button type="button" data-secret-key="api_hash"><span class="secret-label">api_hash</span><span class="secret-content">••••••••••••••••</span></button>
+      <button type="button" data-secret-key="username"><span class="secret-label">Telegram username</span><span class="secret-content">••••••••</span></button>
+      <button type="button" data-secret-key="phone"><span class="secret-label">Телефон</span><span class="secret-content">••••••••••</span></button>
+      <button type="button" data-secret-key="session_name"><span class="secret-label">Session</span><span class="secret-content">••••••••</span></button>
+    </div>
+    <button id="reveal-secrets" class="secondary-button" type="button">Увидеть данные</button>
+    <p id="secrets-message" class="form-message"></p>
+  </article>
+
+  <article class="card storage-settings-card">
+    <div class="card-heading"><h2>Папка сохранений</h2><span class="badge">automatic</span></div>
+    <p>Сюда автоматически записываются JSON-результаты парсинга.</p>
+    <div class="copy-field">
+      <code id="settings-storage-path">{{ settings.save_dir }}</code>
+      <button type="button" class="copy-button" data-copy-target="#settings-storage-path">Копировать</button>
+    </div>
+    <details>
+      <summary>Изменить папку</summary>
+      <form id="storage-form">
+        <label>Новый путь<input name="save_dir" value="{{ settings.save_dir }}" required></label>
+        <small>Папка будет создана автоматически. Системные директории запрещены.</small>
+        <button class="primary-button" type="submit">Сохранить путь</button>
+        <p class="form-message"></p>
+      </form>
+    </details>
+  </article>
+
+  <article class="card danger-card session-card">
+    <div class="card-heading"><h2>Сменить пользователя</h2><span class="badge danger">полный выход</span></div>
+    <p>Сначала отзывает этот вход на стороне Telegram, затем удаляет локальную session, <code>api_id</code>, <code>api_hash</code>, телефон и данные профиля. Следующий пользователь начнёт с первого шага.</p>
+    <p>Если Telegram недоступен, локальные данные останутся на месте: приложение объяснит причину и предложит повторить, чтобы активный вход не остался незамеченным.</p>
+    <p>История парсинга, выгруженные файлы и выбранная папка результатов останутся на устройстве.</p>
+    <button id="reset-session" class="danger-button" type="button">Удалить данные входа</button>
+    <p id="reset-message" class="form-message"></p>
+  </article>
+
+  <article class="card">
+    <div class="card-heading"><h2>Граница безопасности</h2></div>
+    <p>Сервер слушает <code>127.0.0.1</code>. Не публикуйте его наружу без полноценной аутентификации: session-файл даёт доступ к вашему Telegram-аккаунту.</p>
+  </article>
+</div>
+{% endblock %}

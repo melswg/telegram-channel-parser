@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}Обзор · Telegram Importer{% endblock %}
+{% block content %}
+<section class="page-head overview-head">
+  <span class="eyebrow">LOCAL-FIRST TELEGRAM IMPORTER</span>
+  <h1>Что умеет приложение</h1>
+  <p>Локально читает доступные вашему аккаунту посты и комментарии, сохраняет структурированный JSON и при необходимости скачивает media. Никакой аккаунт автора проекта не используется.</p>
+  <a class="primary-button overview-action" href="/">Перейти к парсингу <b>→</b></a>
+</section>
+
+<section class="overview-grid">
+  <article class="card">
+    <span class="step-number">01</span>
+    <h2>Какие каналы доступны</h2>
+    <p>Публичные каналы можно передавать ссылкой или через <code>@username</code>. Приватные каналы доступны по ссылке <code>t.me/c/...</code>, только если текущий Telegram-аккаунт уже подписан на них.</p>
+  </article>
+  <article class="card">
+    <span class="step-number">02</span>
+    <h2>Если вход прервался</h2>
+    <p>Запросите новый код и попробуйте снова. Временный запрос входа хранится в памяти локального сервера, поэтому после его перезапуска старый код продолжить нельзя.</p>
+  </article>
+  <article class="card">
+    <span class="step-number">03</span>
+    <h2>Media по желанию</h2>
+    <p>При парсинге включите «Скачивать media». Фото, видео, голосовые, аудио и документы попадут в папку <code>media</code> рядом с JSON. Экспорт с media скачивается как ZIP.</p>
+  </article>
+  <article class="card">
+    <span class="step-number">04</span>
+    <h2>Безопасный повтор</h2>
+    <p>Если Telegram временно недоступен или отдельный пост не обработался, повторите запуск. Записи обновляются идемпотентно, без накопления дублей.</p>
+  </article>
+</section>
+
+<section class="card overview-recommendations">
+  <div class="card-heading"><h2>Рекомендации</h2><span class="badge">коротко</span></div>
+  <ul>
+    <li>Для обычного запуска берите 10–50 последних постов.</li>
+    <li>Большое количество media требует больше времени и свободного места.</li>
+    <li>Invite-ссылки не используются: приложение не вступает в каналы самостоятельно.</li>
+    <li>При смене пользователя выполните полный выход в настройках: он отзывает вход в Telegram и удаляет локальные credentials.</li>
+    <li>Не публикуйте `.session`, `.env`, `api_hash`, коды входа и пароль 2FA.</li>
+  </ul>
+</section>
+{% endblock %}

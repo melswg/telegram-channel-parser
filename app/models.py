@@ -2,7 +2,7 @@
 
 from dataclasses import dataclass, field, asdict
 from typing import Optional
-from datetime import datetime
+from datetime import datetime, timezone
 
 
 @dataclass
@@ -92,4 +92,4 @@ def to_dict(obj) -> dict:
 
 def now_iso() -> str:
     """Current UTC time as ISO string."""
-    return datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")

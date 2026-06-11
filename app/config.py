@@ -1,4 +1,4 @@
-"""Configuration loader from .env file."""
+"""Configuration loader from environment or the local Web UI config."""
 
 import os
 from pathlib import Path
@@ -33,8 +33,9 @@ class Config:
 
 
 def load_config(env_path: Optional[str] = None) -> Config:
-    """Load config from .env file (or environment variables)."""
+    """Load config from environment, .env, or the ignored local config."""
     from dotenv import load_dotenv
+    from .local_settings import LocalSettings
 
     if env_path:
         load_dotenv(env_path, override=True)
@@ -47,9 +48,9 @@ def load_config(env_path: Optional[str] = None) -> Config:
                 load_dotenv(test, override=True)
                 break
 
-    # Telegram credentials (required)
-    api_id_str = os.getenv("API_ID", "")
-    api_hash = os.getenv("API_HASH", "")
+    local = LocalSettings.load_effective()
+    api_id_str = os.getenv("API_ID", "") or str(local.api_id or "")
+    api_hash = os.getenv("API_HASH", "") or local.api_hash
 
     if not api_id_str or not api_hash:
         raise ValueError(
@@ -65,7 +66,7 @@ def load_config(env_path: Optional[str] = None) -> Config:
     return Config(
         api_id=api_id,
         api_hash=api_hash,
-        session_name=os.getenv("SESSION_NAME", "telegram_importer"),
+        session_name=local.session_path,
         channels=channels,
         whisper_model=os.getenv("WHISPER_MODEL", "base"),
         whisper_language=os.getenv("WHISPER_LANGUAGE") or None,

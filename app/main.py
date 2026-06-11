@@ -136,6 +136,105 @@ def sync(
     asyncio.run(_run())
 
 
+# ── parse post/channel ───────────────────────────────────────────────────
+
+def _parse_target_cli(
+    url: str,
+    expected_kind: str,
+    limit: int = 10,
+    download_media: bool = False,
+):
+    cfg = get_config()
+    from .db import Database
+    from .parser import execute_parse_run
+    from .targets import parse_telegram_target
+
+    try:
+        target = parse_telegram_target(url)
+    except ValueError as exc:
+        console.print(f"[red]Некорректная цель:[/red] {exc}")
+        raise typer.Exit(1)
+    if target.kind != expected_kind:
+        console.print(
+            f"[red]Ожидалась ссылка типа {expected_kind}, получено: {target.kind}.[/red]"
+        )
+        raise typer.Exit(1)
+
+    db = Database(cfg.db_path)
+    db.open()
+    try:
+        run_id = db.create_parse_run(
+            target.canonical_url, target.kind, target.channel,
+            total_posts=1 if target.kind == "post" else limit,
+            download_media=download_media,
+        )
+    finally:
+        db.close()
+
+    result = asyncio.run(
+        execute_parse_run(
+            run_id,
+            target,
+            limit=limit,
+            db_path=cfg.db_path,
+            download_media=download_media,
+        )
+    )
+    if result.get("status") == "failed":
+        console.print(f"[red]Ошибка:[/red] {result.get('error', 'parse failed')}")
+        raise typer.Exit(1)
+    console.print(
+        f"[green]Готово[/green]: {result.get('posts_count', 0)} постов, "
+        f"{result.get('comments_count', 0)} комментариев"
+    )
+    console.print(f"Run: [bold]#{run_id}[/bold] · {result.get('save_path', '')}")
+
+
+@app.command(name="parse-post")
+def parse_post_command(
+    url: str = typer.Argument(..., help="Ссылка вида https://t.me/channel/123"),
+    media: bool = typer.Option(
+        False, "--media", help="Скачать media в папку рядом с post.json"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Подробный вывод"),
+):
+    """Распарсить один Telegram-пост и его комментарии."""
+    setup_logging(verbose)
+    _parse_target_cli(url, expected_kind="post", limit=1, download_media=media)
+
+
+@app.command(name="parse-channel")
+def parse_channel_command(
+    url: str = typer.Argument(..., help="Ссылка вида https://t.me/channel"),
+    limit: int = typer.Option(
+        10, "--limit", "-l", min=1, max=200,
+        help="Последних постов; рекомендуется не больше 50",
+    ),
+    allow_large: bool = typer.Option(
+        False, "--allow-large",
+        help="Явно разрешить лимит больше 50",
+    ),
+    media: bool = typer.Option(
+        False, "--media", help="Скачать media постов и комментариев"
+    ),
+    verbose: bool = typer.Option(False, "--verbose", "-v", help="Подробный вывод"),
+):
+    """Распарсить последние посты канала и их комментарии."""
+    setup_logging(verbose)
+    if limit > 50 and not allow_large:
+        console.print(
+            "[yellow]Лимит больше 50 требует --allow-large. "
+            "Для обычного запуска рекомендуется 10–50 постов.[/yellow]"
+        )
+        raise typer.Exit(1)
+    _parse_target_cli(
+        url,
+        expected_kind="channel",
+        limit=limit,
+        download_media=media,
+    )
+
+
 # ── transcribe ────────────────────────────────────────────────────────────
 
 @app.command()

@@ -1,0 +1,171 @@
+{% extends "base.html" %}
+{% block title %}Парсинг · Telegram Importer{% endblock %}
+{% block content %}
+<section class="hero">
+  <div>
+    <span class="eyebrow">LOCAL-FIRST TELEGRAM READER</span>
+    <h1>Комментарии Telegram,<br><span>готовые к анализу.</span></h1>
+    <p>Один локальный интерфейс для постов, тредов и экспорта. Без облака, общего аккаунта и скрытого backend.</p>
+  </div>
+  <div id="auth-card" class="status-card skeleton">
+    <span class="status-dot"></span>
+    <div>
+      <small>TELEGRAM SESSION</small>
+      <strong>Проверяем локальную сессию…</strong>
+      <span id="auth-reason" class="auth-reason"></span>
+    </div>
+    <button id="open-onboarding" class="link-button" type="button">Настроить</button>
+  </div>
+</section>
+
+<section class="grid-main">
+  <article class="card parse-card">
+    <div class="card-heading">
+      <div><span class="step">01</span><h2>Новый импорт</h2></div>
+      <span id="target-kind" class="badge">автоопределение</span>
+    </div>
+    <form id="parse-form">
+      <label for="telegram-url">Ссылка на пост или канал</label>
+      <div class="url-row">
+        <span class="input-prefix">t.me/</span>
+        <input id="telegram-url" name="url" placeholder="deployladeploy/1935" autocomplete="off" required>
+      </div>
+      <div class="parse-options">
+        <div>
+          <label for="parse-limit">Последних постов</label>
+          <input id="parse-limit" name="limit" type="number" min="1" max="200" value="10">
+          <small>Для канала. Рекомендуется 10–50.</small>
+        </div>
+        <div class="parse-toggles">
+          <label class="check-control">
+            <input id="download-media" type="checkbox">
+            <span>Скачивать media</span>
+          </label>
+          <label class="check-control">
+            <input id="confirm-large" type="checkbox">
+            <span>Подтверждаю лимит больше 50</span>
+          </label>
+        </div>
+      </div>
+      <p class="media-hint">При включении фото, видео, голосовые и документы сохранятся в папке <code>media</code> рядом с JSON. Это увеличит время и объём загрузки.</p>
+      <button class="primary-button" type="submit">
+        <span>Спарсить</span><b>→</b>
+      </button>
+      <p id="parse-message" class="form-message"></p>
+    </form>
+  </article>
+
+  <aside class="card storage-card">
+    <span class="step">02</span>
+    <h2>Локальное хранилище</h2>
+    <p>JSON-файлы и индекс SQLite сохраняются только на вашем устройстве.</p>
+    <code id="storage-path">data/parsed</code>
+    <a class="text-link" href="/settings">Изменить папку →</a>
+    <div class="security-note">
+      <strong>Read-only Telegram access</strong>
+      <span>Приложение не пишет сообщения, не ставит реакции и не вступает в каналы.</span>
+    </div>
+  </aside>
+</section>
+
+<section class="section-block">
+  <div class="section-heading"><div><span class="eyebrow">ACTIVITY</span><h2>Последние запуски</h2></div></div>
+  <div class="run-list">
+    {% for run in runs %}
+    <a class="run-row" href="/runs/{{ run.id }}">
+      <span class="run-icon">{{ "P" if run.target_type == "post" else "C" }}</span>
+      <span class="run-main"><strong>@{{ run.channel }}</strong><small>{{ run.source_url }}</small></span>
+      <span class="run-count">{{ run.posts_count }} пост. · {{ run.comments_count }} комм.</span>
+      <span class="status-badge status-{{ run.status }}">{{ run.status }}</span>
+      <span class="row-arrow">›</span>
+    </a>
+    {% else %}
+    <div class="empty-state"><strong>История пока пуста</strong><span>Первый импорт появится здесь.</span></div>
+    {% endfor %}
+  </div>
+</section>
+
+{% if posts %}
+<section class="section-block">
+  <div class="section-heading"><div><span class="eyebrow">LIBRARY</span><h2>Недавние посты</h2></div></div>
+  <div class="post-grid">
+    {% for post in posts %}
+    <a class="mini-post" href="/posts/{{ post.channel }}/{{ post.post_id }}">
+      <span class="badge">@{{ post.channel }}</span>
+      <h3>{{ post.text[:110] or "Пост без текста" }}{% if post.text|length > 110 %}…{% endif %}</h3>
+      <small>#{{ post.post_id }} · {{ post.comments_count }} комментариев</small>
+    </a>
+    {% endfor %}
+  </div>
+</section>
+{% endif %}
+
+<div
+  id="onboarding-overlay"
+  class="onboarding-overlay"
+  data-initial-step="{{ onboarding_step }}"
+  {% if not onboarding_required %}hidden{% endif %}
+>
+  <section class="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
+    <div class="onboarding-brand">
+      <span class="brand-mark">T</span>
+      <div>
+        <strong>Первичная настройка</strong>
+        <small>Локальное подключение вашего Telegram</small>
+      </div>
+    </div>
+
+    <div class="onboarding-progress" aria-label="Прогресс подключения">
+      <span data-progress-step="credentials">Данные приложения</span>
+      <i></i>
+      <span data-progress-step="telegram">Вход в Telegram</span>
+    </div>
+
+    <div class="onboarding-panel" data-onboarding-panel="credentials">
+      <span class="eyebrow">TELEGRAM API</span>
+      <h2 id="onboarding-title">Подключите своё приложение Telegram</h2>
+      <p>Нужны ваши личные <code>api_id</code> и <code>api_hash</code>. Мы проверим их через Telegram и сохраним только на этом компьютере.</p>
+      <a class="guide-download" href="/downloads/telegram-api-setup.md" download>
+        <span>↓</span>
+        <span><strong>Скачать инструкцию .md</strong><small>Как получить api_id и api_hash на my.telegram.org</small></span>
+      </a>
+      <form id="credentials-form">
+        <label>api_id<input name="api_id" type="number" min="1" inputmode="numeric" placeholder="12345678" required></label>
+        <label>api_hash<input name="api_hash" type="password" autocomplete="new-password" placeholder="32 символа" required></label>
+        <input name="session_name" type="hidden" value="telegram_importer">
+        <button class="primary-button onboarding-primary" type="submit">Продолжить <b>→</b></button>
+        <p class="form-message"></p>
+      </form>
+      <p class="privacy-line">Credentials не отправляются автору проекта или на сторонний сервер.</p>
+    </div>
+
+    <div class="onboarding-panel" data-onboarding-panel="telegram" hidden>
+      <span class="eyebrow">YOUR TELEGRAM ACCOUNT</span>
+      <h2>Авторизуйте локальную session</h2>
+      <p>Сначала проверим номер и отправим код в официальное приложение Telegram. Пароль нужен только при включённой 2FA.</p>
+      <form id="telegram-login-form" data-mode="request-code">
+        <label>Номер телефона<input name="phone" type="tel" autocomplete="tel" placeholder="+79991234567" required></label>
+        <label>Пароль 2FA <small>необязательно, проверится после кода</small><input name="password" type="password" autocomplete="current-password" placeholder="Если включён облачный пароль"></label>
+        <div id="code-field" class="locked-field">
+          <label>Код из Telegram<input name="code" inputmode="numeric" autocomplete="one-time-code" placeholder="Сначала запросите код" disabled required></label>
+          <span class="locked-hint">Поле станет активным после проверки номера</span>
+        </div>
+        <button class="primary-button onboarding-primary" type="submit">
+          <span class="login-button-label">Проверить и отправить код</span><b>→</b>
+        </button>
+        <button id="change-phone" class="secondary-button" type="button" hidden>Изменить номер</button>
+        <p class="form-message"></p>
+      </form>
+      <p class="privacy-line">Код и пароль 2FA используются только для входа и никогда не сохраняются.</p>
+    </div>
+
+    <div class="onboarding-panel onboarding-success" data-onboarding-panel="success" hidden>
+      <span class="success-check">✓</span>
+      <span class="eyebrow">READY</span>
+      <h2>Telegram подключён</h2>
+      <p>Локальная session создана. Теперь можно парсить доступные вашему аккаунту посты и комментарии.</p>
+      <button id="finish-onboarding" class="primary-button onboarding-primary" type="button">Перейти к импорту</button>
+    </div>
+  </section>
+</div>
+{% endblock %}

@@ -34,6 +34,16 @@ class TelegramBackend:
         log.info("Logged in as %s", self._me.username or self._me.phone or self._me.id)
         return self._me
 
+    async def connect(self):
+        """Connect without triggering terminal prompts."""
+        self.client = TelegramClient(self.session_name, self.api_id, self.api_hash)
+        await self.client.connect()
+        if not await self.client.is_user_authorized():
+            await self.stop()
+            raise PermissionError("Telegram session is not authorized")
+        self._me = await self.client.get_me()
+        return self._me
+
     async def stop(self):
         if self.client:
             await self.client.disconnect()
@@ -41,25 +51,61 @@ class TelegramBackend:
 
     async def resolve_channel(self, identifier: str) -> Tuple[TLChannel, Optional[Channel]]:
         """Resolve a channel @username, https://t.me/..., or raw string. Returns (entity, Channel or None)."""
+        private_channel_id = None
+        if identifier.startswith("c:"):
+            try:
+                private_channel_id = int(identifier.removeprefix("c:"))
+            except ValueError as exc:
+                raise ValueError("Некорректный ID приватного канала.") from exc
+            name = f"private_{private_channel_id}"
+            lookup = int(f"-100{private_channel_id}")
+        else:
+            lookup = None
+
         # Strip URL prefixes
-        name = identifier.strip().rstrip("/")
-        if "/" in name:
-            name = name.rsplit("/", 1)[-1]
-        name = name.lstrip("@")
+        if private_channel_id is None:
+            name = identifier.strip().rstrip("/")
+            if "/" in name:
+                name = name.rsplit("/", 1)[-1]
+            name = name.lstrip("@")
+            lookup = name
 
         try:
-            entity = await self.client.get_entity(name)
+            entity = await self.client.get_entity(lookup)
         except errors.UsernameNotOccupiedError:
             raise ValueError(f"Channel @{name} not found")
         except errors.ChannelPrivateError:
-            raise ValueError(f"Channel @{name} is private/inaccessible")
-        except ValueError as e:
-            raise ValueError(f"Cannot resolve '{identifier}': {e}")
+            raise ValueError(
+                "Канал приватный и недоступен текущему Telegram-аккаунту. "
+                "Убедитесь, что этот аккаунт подписан на канал."
+            )
+        except (TypeError, ValueError) as e:
+            if private_channel_id is not None:
+                entity = None
+                async for dialog in self.client.iter_dialogs():
+                    candidate = getattr(dialog, "entity", None)
+                    if getattr(candidate, "id", None) == private_channel_id:
+                        entity = candidate
+                        break
+                if entity is None:
+                    raise ValueError(
+                        "Приватный канал не найден в session текущего аккаунта. "
+                        "Почему: аккаунт не подписан на канал или ссылка устарела."
+                    ) from e
+            else:
+                raise ValueError(f"Cannot resolve '{identifier}': {e}")
 
-        if not isinstance(entity, TLChannel) or not getattr(entity, "username", None):
-            raise ValueError(f"@{name} is not a public channel (entity type: {type(entity).__name__})")
+        if not isinstance(entity, TLChannel):
+            raise ValueError(
+                f"Ссылка ведёт не на канал (тип: {type(entity).__name__})."
+            )
 
-        return entity, Channel.from_entity(entity)
+        channel = Channel.from_entity(entity)
+        if not channel.username:
+            if private_channel_id is None:
+                raise ValueError("У канала нет публичного username.")
+            channel.username = name
+        return entity, channel
 
     async def iter_posts(self, entity, limit: Optional[int] = None,
                          offset_id: Optional[int] = None,
@@ -93,6 +139,8 @@ class TelegramBackend:
                 if isinstance(msg, MessageService):
                     continue
                 yield msg
+        except errors.FloodWaitError:
+            raise
         except (errors.RPCError, ValueError):
             # Fallback: low-level GetRepliesRequest
             from telethon import functions
@@ -111,6 +159,8 @@ class TelegramBackend:
                         min_id=0,
                         hash=0,
                     ))
+                except errors.FloodWaitError:
+                    raise
                 except errors.RPCError as e:
                     log.warning("GetRepliesRequest failed for post %d: %s", post_msg_id, e)
                     break
@@ -198,15 +248,28 @@ class TelegramBackend:
             mime = getattr(media.document, "mime_type", "") if media.document else ""
             if mime and mime.startswith("audio/"):
                 return True, "audio"
+            attr_names = {type(attr).__name__ for attr in attrs}
+            if "DocumentAttributeSticker" in attr_names:
+                return False, "sticker"
+            if "DocumentAttributeAnimated" in attr_names:
+                return False, "animation"
+            if "DocumentAttributeVideo" in attr_names:
+                if any(getattr(attr, "round_message", False) for attr in attrs):
+                    return False, "video_note"
+                return False, "video"
+            if mime.startswith("image/"):
+                return False, "image"
+            if mime:
+                return False, "document"
 
-            if media.photo:
+            if getattr(media, "photo", None):
                 return False, "photo"
 
         if hasattr(media, "photo") and media.photo:
             return False, "photo"
 
         if isinstance(media, MessageMediaWebPage):
-            return False, None
+            return False, "web_preview"
 
         return False, "other"
 

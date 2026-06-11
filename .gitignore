@@ -2,6 +2,7 @@
 .env
 *.session
 *.session-journal
+.local/
 
 # Python
 .venv/
@@ -13,6 +14,11 @@ __pycache__/
 
 # Runtime data
 *.log
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+data/parsed/
+data/exports/web/
 
 # OS/editor
 .DS_Store

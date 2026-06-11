@@ -1,0 +1,55 @@
+{% extends "base.html" %}
+{% block title %}@{{ post.channel }}/{{ post.post_id }} · Telegram Importer{% endblock %}
+{% block content %}
+<section class="detail-head">
+  <div>
+    <a class="back-link" href="/">← Назад</a>
+    <span class="eyebrow">@{{ post.channel }} · POST #{{ post.post_id }}</span>
+    <h1>{{ post.channel_title or ("@" ~ post.channel) }}</h1>
+  </div>
+  <div class="export-panel">
+    <label class="media-export-toggle"><input type="checkbox" data-export-media><span>Включить media</span></label>
+    <div class="export-buttons">
+      <a data-export-link href="/api/export/post/{{ post.channel }}:{{ post.post_id }}?format=json">JSON</a>
+      <a data-export-link href="/api/export/post/{{ post.channel }}:{{ post.post_id }}?format=jsonl">JSONL</a>
+      <a data-export-link href="/api/export/post/{{ post.channel }}:{{ post.post_id }}?format=csv">CSV</a>
+    </div>
+    <small>С media будет скачан ZIP: данные и папка <code>media</code>.</small>
+    <p class="export-message form-message"></p>
+  </div>
+</section>
+<article class="card post-detail">
+  <div class="post-meta">
+    <span>{{ post.date }}</span>
+    {% if post.has_media %}<span class="badge">{{ post.media_type or "media" }}</span>{% endif %}
+    {% if post.views is not none %}<span>{{ post.views }} просмотров</span>{% endif %}
+  </div>
+  <div class="post-copy">{{ post.text or "Пост без текстовой части." }}</div>
+  {% if post.media_directory %}
+  <p class="media-ready-note">Скачанные файлы этого поста находятся в папке <code>media</code> рядом с <code>post.json</code>.</p>
+  {% endif %}
+  <a class="text-link" href="https://t.me/{{ post.channel }}/{{ post.post_id }}" target="_blank" rel="noreferrer">Открыть оригинал ↗</a>
+</article>
+<section class="thread-section">
+  <div class="section-heading"><div><span class="eyebrow">DISCUSSION</span><h2>{{ post.comments_count }} комментариев</h2></div></div>
+  <div class="thread">
+    {% for comment in post.comments %}
+    <article class="comment-card">
+      <div class="avatar">{{ (comment.sender_name or comment.sender_username or "?")[:1]|upper }}</div>
+      <div class="comment-body">
+        <div class="comment-head">
+          <strong>{{ comment.sender_name or ("@" ~ comment.sender_username if comment.sender_username else "Удалённый пользователь") }}</strong>
+          {% if comment.sender_username %}<span>@{{ comment.sender_username }}</span>{% endif %}
+          <time>{{ comment.date }}</time>
+        </div>
+        {% if comment.reply_to_comment_id %}<span class="reply-badge">↳ reply to #{{ comment.reply_to_comment_id }}</span>{% endif %}
+        <p>{{ comment.text or "Комментарий без текста" }}</p>
+        {% if comment.has_media %}<span class="badge">{{ comment.media_type or "media" }}</span>{% endif %}
+      </div>
+    </article>
+    {% else %}
+    <div class="empty-state"><strong>Комментариев нет</strong><span>Они отключены, недоступны или тред пока пуст.</span></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}

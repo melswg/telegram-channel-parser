@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% block title %}Запуск #{{ run.id }} · Telegram Importer{% endblock %}
+{% block content %}
+<section class="detail-head" data-run-id="{{ run.id }}" data-run-status="{{ run.status }}">
+  <div>
+    <a class="back-link" href="/">← Назад</a>
+    <span class="eyebrow">PARSE RUN #{{ run.id }}</span>
+    <h1>@{{ run.channel }}</h1>
+    <p>{{ run.source_url }}</p>
+  </div>
+  <div class="export-panel">
+    <label class="media-export-toggle"><input type="checkbox" data-export-media><span>Включить media</span></label>
+    <div class="export-buttons">
+      <a data-export-link href="/api/export/run/{{ run.id }}?format=json">JSON</a>
+      <a data-export-link href="/api/export/run/{{ run.id }}?format=jsonl">JSONL</a>
+      <a data-export-link href="/api/export/run/{{ run.id }}?format=csv">CSV</a>
+    </div>
+    <small>С media будет скачан ZIP: данные и папка <code>media</code>.</small>
+    <p class="export-message form-message"></p>
+  </div>
+</section>
+<article id="run-status-card" class="card run-status-card">
+  <div class="run-status-top">
+    <span id="run-status" class="status-badge status-{{ run.status }}">{{ run.status }}</span>
+    <span id="run-progress-text">{{ run.processed_posts }} / {{ run.total_posts }} постов</span>
+  </div>
+  <div class="progress-track"><i id="run-progress" style="width: {{ (run.processed_posts * 100 / run.total_posts) if run.total_posts else 0 }}%"></i></div>
+  <div class="run-metrics">
+    <div><strong id="run-posts">{{ run.posts_count }}</strong><span>постов</span></div>
+    <div><strong id="run-comments">{{ run.comments_count }}</strong><span>комментариев</span></div>
+    <div><strong id="run-media">{{ run.media_files_count or 0 }}</strong><span>media-файлов</span></div>
+    <div><strong>{{ run.target_type }}</strong><span>тип цели</span></div>
+  </div>
+  {% if run.download_media %}
+  <p class="media-ready-note">Media загружаются в папку <code>media</code> каждого поста. Не все Telegram media обязательно содержат скачиваемый файл.</p>
+  {% endif %}
+  <p id="run-error" class="error-text">{{ run.error }}</p>
+</article>
+<section class="section-block">
+  <div class="section-heading"><div><span class="eyebrow">RESULTS</span><h2>Обработанные посты</h2></div></div>
+  <div id="run-post-list" class="run-list">
+    {% for post in run.posts %}
+    {% if post.error %}
+    <div class="run-row error-row"><span class="run-icon">!</span><span class="run-main"><strong>Пост #{{ post.post_id }}</strong><small>{{ post.error }}</small></span></div>
+    {% else %}
+    <a class="run-row" href="/posts/{{ post.channel }}/{{ post.post_id }}">
+      <span class="run-icon">P</span>
+      <span class="run-main"><strong>Пост #{{ post.post_id }}</strong><small>{{ post.text[:100] or "Без текста" }}</small></span>
+      <span class="run-count">{{ post.comments_count }} комментариев</span><span class="row-arrow">›</span>
+    </a>
+    {% endif %}
+    {% else %}
+    <div class="empty-state"><strong>Ожидаем данные</strong><span>Страница обновит прогресс автоматически.</span></div>
+    {% endfor %}
+  </div>
+</section>
+{% endblock %}
