@@ -5,6 +5,7 @@ from pathlib import Path
 
 from app.db import Database
 from app.parser import (
+    _collect_messages,
     _prepare_media,
     _publication_numbers,
     _unprocessed_messages,
@@ -119,6 +120,45 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
             db.update_parse_run(run_id, status="running")
             self.assertTrue(await asyncio.wait_for(waiter, timeout=1))
             db.close()
+
+    async def test_message_collection_stops_immediately_on_external_pause(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as root:
+            db_path = str(Path(root) / "test.sqlite3")
+            worker_db = Database(db_path)
+            worker_db.open()
+            controller_db = Database(db_path)
+            controller_db.open()
+            run_id = worker_db.create_parse_run(
+                "https://t.me/example",
+                "channel",
+                "example",
+                3,
+            )
+            worker_db.update_parse_run(run_id, status="running")
+
+            first_message_seen = asyncio.Event()
+
+            class SlowBackend:
+                async def iter_posts(self, _entity, limit=None):
+                    for message_id in (3, 2, 1):
+                        yield type("Message", (), {"id": message_id})()
+                        if message_id == 3:
+                            first_message_seen.set()
+                        await asyncio.sleep(0.05)
+
+            collection = asyncio.create_task(_collect_messages(
+                SlowBackend(), object(), 3, worker_db, run_id
+            ))
+            await first_message_seen.wait()
+            controller_db.update_parse_run(run_id, status="paused")
+            await asyncio.sleep(0.12)
+            self.assertFalse(collection.done())
+
+            controller_db.update_parse_run(run_id, status="running")
+            messages = await asyncio.wait_for(collection, timeout=1)
+            self.assertEqual([message.id for message in messages], [3, 2, 1])
+            controller_db.close()
+            worker_db.close()
 
     def test_empty_limit_previews_all_available_posts(self):
         preview = build_parse_preview(

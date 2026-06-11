@@ -143,6 +143,21 @@ async def _wait_until_resumed(db: Database, run_id: int) -> bool:
         return status in {"queued", "running"}
 
 
+async def _collect_messages(
+    tg: TelegramBackend,
+    entity,
+    limit: int | None,
+    db: Database,
+    run_id: int,
+) -> list:
+    messages = []
+    async for message in tg.iter_posts(entity, limit=limit):
+        if not await _wait_until_resumed(db, run_id):
+            break
+        messages.append(message)
+    return messages
+
+
 def _write_json(path: Path, payload: dict) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     temp = path.with_suffix(f"{path.suffix}.tmp")
@@ -243,6 +258,8 @@ async def _publication_numbers(
     tg: TelegramBackend,
     entity,
     message_ids: set[int],
+    db: Database | None = None,
+    run_id: int | None = None,
 ) -> dict[int, int]:
     """Return exact chronological positions among existing channel posts."""
     if not message_ids:
@@ -250,6 +267,9 @@ async def _publication_numbers(
     numbers: dict[int, int] = {}
     position = 0
     async for historical in tg.iter_posts(entity, reverse=True):
+        if db is not None and run_id is not None:
+            if not await _wait_until_resumed(db, run_id):
+                break
         position += 1
         if historical.id in message_ids:
             numbers[historical.id] = position
@@ -271,6 +291,8 @@ async def _parse_message(
     download_media: bool,
     publication_number: int | None,
 ) -> tuple[dict, Path, list[str], int]:
+    if not await _wait_until_resumed(db, run_id):
+        raise asyncio.CancelledError
     post = tg.message_to_post(msg, channel_db_id)
     db.upsert_post(post)
     has_media, media_type = _media_metadata(tg, msg)
@@ -280,6 +302,8 @@ async def _parse_message(
     media_files_count = 0
     post_media = None
     if has_media:
+        if not await _wait_until_resumed(db, run_id):
+            raise asyncio.CancelledError
         post_media, warning = await _prepare_media(
             tg, msg, media_dir, f"post_{msg.id}", media_type, download_media
         )
@@ -290,6 +314,8 @@ async def _parse_message(
 
     comments: list[dict[str, Any]] = []
     async for comment_msg in tg.iter_comments(entity, msg.id):
+        if not await _wait_until_resumed(db, run_id):
+            raise asyncio.CancelledError
         try:
             sender = await comment_msg.get_sender()
         except (errors.RPCError, ValueError):
@@ -299,6 +325,8 @@ async def _parse_message(
         comment_has_media, comment_media_type = _media_metadata(tg, comment_msg)
         comment_media = None
         if comment_has_media:
+            if not await _wait_until_resumed(db, run_id):
+                raise asyncio.CancelledError
             comment_media, warning = await _prepare_media(
                 tg,
                 comment_msg,
@@ -440,7 +468,9 @@ async def execute_parse_run(
             messages = [msg]
             total_posts = 1
         else:
-            messages = [msg async for msg in tg.iter_posts(entity, limit=limit)]
+            messages = await _collect_messages(
+                tg, entity, limit, db, run_id
+            )
             total_posts = len(messages)
         if not queued_ids:
             db.save_parse_run_queue(
@@ -459,6 +489,8 @@ async def execute_parse_run(
                 tg,
                 entity,
                 {msg.id for msg in messages},
+                db,
+                run_id,
             )
         db.update_parse_run(run_id, total_posts=total_posts)
         for offset, msg in enumerate(pending_messages, start=1):

@@ -475,6 +475,8 @@ if (resetButton) {
   });
 }
 
+let runStateVersion = 0;
+
 function renderRunState(run) {
   const head = $("[data-run-id]");
   if (!head) return;
@@ -502,6 +504,7 @@ async function changeRunState(action) {
   if (!head) return;
   const button = action === "pause" ? $("#pause-run") : $("#resume-run");
   const controlMessage = $("#run-control-message");
+  runStateVersion += 1;
   button.disabled = true;
   controlMessage.classList.remove("error-text");
   try {
@@ -510,7 +513,7 @@ async function changeRunState(action) {
     });
     renderRunState(run);
     controlMessage.textContent = action === "pause"
-      ? "Парсер остановится перед следующей публикацией."
+      ? "Парсинг приостановлен. Уже начатый запрос Telegram завершится безопасно."
       : "Парсинг продолжен с сохранённого места.";
   } catch (error) {
     controlMessage.textContent = error.message;
@@ -528,8 +531,13 @@ async function pollRun() {
   if (!head) return;
   if (!["queued", "running", "paused"].includes(head.dataset.runStatus)) return;
   const runId = head.dataset.runId;
+  const requestedVersion = runStateVersion;
   try {
     const run = await api(`/api/runs/${runId}`);
+    if (requestedVersion !== runStateVersion) {
+      setTimeout(pollRun, 250);
+      return;
+    }
     renderRunState(run);
     if (["queued", "running", "paused"].includes(run.status)) {
       setTimeout(pollRun, 1200);
