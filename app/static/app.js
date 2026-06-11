@@ -231,14 +231,6 @@ if (telegramLoginForm) {
   });
 }
 
-const finishOnboardingButton = $("#finish-onboarding");
-if (finishOnboardingButton) {
-  finishOnboardingButton.addEventListener("click", () => {
-    closeOnboarding();
-    location.reload();
-  });
-}
-
 const parseForm = $("#parse-form");
 if (parseForm) {
   const urlInput = $("#telegram-url");
