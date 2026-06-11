@@ -157,6 +157,7 @@ a.run-row:hover { background: rgba(255,255,255,.025); }
 .row-arrow { color: #555a65; font-size: 24px; }
 .status-success, .status-authorized { color: var(--green); border-color: rgba(79,209,161,.2); background: rgba(79,209,161,.06); }
 .status-running, .status-queued { color: #aaa1ff; border-color: rgba(124,108,255,.25); }
+.status-paused { color: var(--yellow); border-color: rgba(255,201,107,.25); background: rgba(255,201,107,.06); }
 .status-partial { color: var(--yellow); }
 .status-failed, .danger, .error-text { color: var(--red) !important; }
 .empty-state { display: grid; place-items: center; min-height: 140px; color: var(--muted); text-align: center; }
@@ -273,6 +274,9 @@ a.run-row:hover { background: rgba(255,255,255,.025); }
 .progress-track { height: 5px; margin: 18px 0 25px; border-radius: 99px; background: #262831; overflow: hidden; }
 .progress-track i { display: block; height: 100%; background: linear-gradient(90deg, #6757ec, #998cff); transition: width .35s; }
 .run-eta { margin: -12px 0 22px; color: var(--muted); font-size: 11px; }
+.run-controls { display: flex; align-items: center; gap: 10px; margin: -6px 0 24px; }
+.run-controls button { min-height: 34px; padding: 8px 14px; }
+.run-controls span { color: var(--muted); font-size: 11px; }
 .run-metrics { display: grid; grid-template-columns: repeat(4, 1fr); }
 .run-metrics div { border-right: 1px solid var(--line); padding: 6px 20px; }
 .run-metrics div:first-child { padding-left: 0; }

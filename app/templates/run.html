@@ -27,6 +27,11 @@
   </div>
   <div class="progress-track"><i id="run-progress" style="width: {{ (run.processed_posts * 100 / run.total_posts) if run.total_posts else 0 }}%"></i></div>
   <p id="run-eta" class="run-eta">{{ run.estimated_wait_text }}</p>
+  <div class="run-controls">
+    <button id="pause-run" class="secondary-button" type="button" {% if run.status not in ["queued", "running"] %}hidden{% endif %}>Пауза</button>
+    <button id="resume-run" class="primary-button" type="button" {% if run.status != "paused" %}hidden{% endif %}>Продолжить</button>
+    <span id="run-control-message"></span>
+  </div>
   <div class="run-metrics">
     <div><strong id="run-posts">{{ run.posts_count }}</strong><span>постов</span></div>
     <div><strong id="run-comments">{{ run.comments_count }}</strong><span>комментариев</span></div>

@@ -41,7 +41,7 @@ DB_PATH = os.getenv(
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 auth_manager = TelegramAuthManager()
 parse_lock = asyncio.Lock()
-running_tasks: set[asyncio.Task] = set()
+running_tasks: dict[int, asyncio.Task] = {}
 
 
 def format_post_date(value: str | None) -> str:
@@ -160,6 +160,8 @@ def enrich_run_estimate(run: dict) -> dict:
         run["estimated_wait_text"] = "Парсинг остановлен из-за ошибки"
     elif status == "queued":
         run["estimated_wait_text"] = "Ожидает запуска…"
+    elif status == "paused":
+        run["estimated_wait_text"] = "Парсинг на паузе"
     else:
         run["estimated_wait_text"] = format_wait_time(remaining)
     return run
@@ -213,9 +215,14 @@ def post_back_target(post: dict, run: dict | None) -> tuple[str, str]:
     return "/", "← Назад к парсингу"
 
 
-def _track_task(task: asyncio.Task) -> None:
-    running_tasks.add(task)
-    task.add_done_callback(running_tasks.discard)
+def _track_task(run_id: int, task: asyncio.Task) -> None:
+    running_tasks[run_id] = task
+
+    def remove_finished(finished: asyncio.Task) -> None:
+        if running_tasks.get(run_id) is finished:
+            running_tasks.pop(run_id, None)
+
+    task.add_done_callback(remove_finished)
 
 
 async def _run_queued_parse(
@@ -223,6 +230,7 @@ async def _run_queued_parse(
     target: TelegramTarget,
     limit: int | None,
     download_media: bool,
+    resume: bool = False,
 ) -> None:
     async with parse_lock:
         await execute_parse_run(
@@ -231,6 +239,7 @@ async def _run_queued_parse(
             limit=limit,
             db_path=DB_PATH,
             download_media=download_media,
+            resume=resume,
         )
 
 
@@ -239,10 +248,17 @@ async def lifespan(_: FastAPI):
     settings = LocalSettings.load_effective()
     Path(settings.session_path).parent.mkdir(parents=True, exist_ok=True)
     db = open_db()
+    db.pause_interrupted_runs()
     db.close()
     yield
     if running_tasks:
-        await asyncio.gather(*running_tasks, return_exceptions=True)
+        db = open_db()
+        db.pause_interrupted_runs()
+        db.close()
+        tasks = list(running_tasks.values())
+        for task in tasks:
+            task.cancel()
+        await asyncio.gather(*tasks, return_exceptions=True)
 
 
 app = FastAPI(
@@ -601,7 +617,7 @@ async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None)
     task = asyncio.create_task(
         _run_queued_parse(run_id, target, limit, payload.download_media)
     )
-    _track_task(task)
+    _track_task(run_id, task)
     return {
         "run_id": run_id,
         "status": "queued",
@@ -677,6 +693,71 @@ async def get_run(run_id: int):
     if not run:
         raise HTTPException(status_code=404, detail="Запуск не найден.")
     return enrich_run_estimate(run)
+
+
+@app.post("/api/runs/{run_id}/pause")
+async def pause_run(run_id: int):
+    db = open_db()
+    try:
+        run = db.get_parse_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Запуск не найден.")
+        if run["status"] not in {"queued", "running"}:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Пауза недоступна. Почему: запуск уже остановлен или "
+                    "завершён. Поставить на паузу можно только активный парсинг."
+                ),
+            )
+        db.update_parse_run(run_id, status="paused", error="")
+        return enrich_run_estimate(db.get_parse_run(run_id) or run)
+    finally:
+        db.close()
+
+
+@app.post("/api/runs/{run_id}/resume")
+async def resume_run(run_id: int):
+    db = open_db()
+    try:
+        run = db.get_parse_run(run_id)
+        if not run:
+            raise HTTPException(status_code=404, detail="Запуск не найден.")
+        if run["status"] != "paused":
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    "Продолжение недоступно. Почему: запуск не находится "
+                    "на паузе."
+                ),
+            )
+        try:
+            target = parse_telegram_target(run["source_url"])
+        except ValueError as exc:
+            raise api_error(exc) from exc
+        limit = (
+            1
+            if target.kind == "post"
+            else int(run["total_posts"]) or None
+        )
+        db.update_parse_run(run_id, status="running", error="")
+        resumed = db.get_parse_run(run_id) or run
+    finally:
+        db.close()
+
+    active_task = running_tasks.get(run_id)
+    if not active_task or active_task.done():
+        task = asyncio.create_task(
+            _run_queued_parse(
+                run_id,
+                target,
+                limit,
+                bool(run["download_media"]),
+                resume=True,
+            )
+        )
+        _track_task(run_id, task)
+    return enrich_run_estimate(resumed)
 
 
 @app.get("/api/export/{scope}/{identifier}")

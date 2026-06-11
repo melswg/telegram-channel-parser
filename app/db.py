@@ -143,6 +143,14 @@ CREATE TABLE IF NOT EXISTS parse_run_posts (
     PRIMARY KEY(run_id, channel, post_id)
 );
 
+CREATE TABLE IF NOT EXISTS parse_run_queue (
+    run_id          INTEGER NOT NULL REFERENCES parse_runs(id) ON DELETE CASCADE,
+    position        INTEGER NOT NULL,
+    post_id         INTEGER NOT NULL,
+    PRIMARY KEY(run_id, position),
+    UNIQUE(run_id, post_id)
+);
+
 CREATE INDEX IF NOT EXISTS idx_parse_runs_started ON parse_runs(started_at DESC);
 CREATE INDEX IF NOT EXISTS idx_parsed_posts_channel ON parsed_posts(channel, post_id DESC);
 CREATE INDEX IF NOT EXISTS idx_parsed_comments_post ON parsed_comments(channel, post_id);
@@ -216,6 +224,60 @@ class Database:
             [*updates.values(), run_id],
         )
         self.conn.commit()
+
+    def get_parse_run_status(self, run_id: int) -> Optional[str]:
+        row = self.conn.execute(
+            "SELECT status FROM parse_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        return str(row["status"]) if row else None
+
+    def get_parse_run_post_ids(self, run_id: int) -> set[int]:
+        return {
+            int(row["post_id"])
+            for row in self.conn.execute(
+                "SELECT post_id FROM parse_run_posts WHERE run_id = ?",
+                (run_id,),
+            ).fetchall()
+        }
+
+    def save_parse_run_queue(self, run_id: int, post_ids: list[int]) -> None:
+        self.conn.execute(
+            "DELETE FROM parse_run_queue WHERE run_id = ?", (run_id,)
+        )
+        self.conn.executemany(
+            """
+            INSERT INTO parse_run_queue (run_id, position, post_id)
+            VALUES (?, ?, ?)
+            """,
+            [
+                (run_id, position, int(post_id))
+                for position, post_id in enumerate(post_ids, start=1)
+            ],
+        )
+        self.conn.commit()
+
+    def get_parse_run_queue(self, run_id: int) -> list[int]:
+        return [
+            int(row["post_id"])
+            for row in self.conn.execute(
+                """
+                SELECT post_id FROM parse_run_queue
+                WHERE run_id = ?
+                ORDER BY position
+                """,
+                (run_id,),
+            ).fetchall()
+        ]
+
+    def pause_interrupted_runs(self) -> int:
+        cursor = self.conn.execute("""
+            UPDATE parse_runs
+            SET status = 'paused',
+                error = 'Приложение было остановлено. Продолжите парсинг с сохранённого места.'
+            WHERE status IN ('queued', 'running')
+        """)
+        self.conn.commit()
+        return int(cursor.rowcount)
 
     def get_parse_run(self, run_id: int) -> Optional[dict]:
         row = self.conn.execute(

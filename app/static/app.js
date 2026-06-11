@@ -475,24 +475,63 @@ if (resetButton) {
   });
 }
 
+function renderRunState(run) {
+  const head = $("[data-run-id]");
+  if (!head) return;
+  head.dataset.runStatus = run.status;
+  const status = $("#run-status");
+  status.textContent = run.status;
+  status.className = `status-badge status-${run.status}`;
+  $("#run-progress-text").textContent = `${run.processed_posts} / ${run.total_posts} постов`;
+  $("#run-progress").style.width = `${run.total_posts ? (run.processed_posts / run.total_posts) * 100 : 0}%`;
+  if ($("#run-eta")) $("#run-eta").textContent = run.estimated_wait_text;
+  $("#run-posts").textContent = run.posts_count;
+  $("#run-comments").textContent = run.comments_count;
+  if ($("#run-media")) $("#run-media").textContent = run.media_files_count || 0;
+  $("#run-error").textContent = run.error || "";
+  if ($("#pause-run")) {
+    $("#pause-run").hidden = !["queued", "running"].includes(run.status);
+  }
+  if ($("#resume-run")) {
+    $("#resume-run").hidden = run.status !== "paused";
+  }
+}
+
+async function changeRunState(action) {
+  const head = $("[data-run-id]");
+  if (!head) return;
+  const button = action === "pause" ? $("#pause-run") : $("#resume-run");
+  const controlMessage = $("#run-control-message");
+  button.disabled = true;
+  controlMessage.classList.remove("error-text");
+  try {
+    const run = await api(`/api/runs/${head.dataset.runId}/${action}`, {
+      method: "POST",
+    });
+    renderRunState(run);
+    controlMessage.textContent = action === "pause"
+      ? "Парсер остановится перед следующей публикацией."
+      : "Парсинг продолжен с сохранённого места.";
+  } catch (error) {
+    controlMessage.textContent = error.message;
+    controlMessage.classList.add("error-text");
+  } finally {
+    button.disabled = false;
+  }
+}
+
+$("#pause-run")?.addEventListener("click", () => changeRunState("pause"));
+$("#resume-run")?.addEventListener("click", () => changeRunState("resume"));
+
 async function pollRun() {
   const head = $("[data-run-id]");
   if (!head) return;
-  if (!["queued", "running"].includes(head.dataset.runStatus)) return;
+  if (!["queued", "running", "paused"].includes(head.dataset.runStatus)) return;
   const runId = head.dataset.runId;
   try {
     const run = await api(`/api/runs/${runId}`);
-    const status = $("#run-status");
-    status.textContent = run.status;
-    status.className = `status-badge status-${run.status}`;
-    $("#run-progress-text").textContent = `${run.processed_posts} / ${run.total_posts} постов`;
-    $("#run-progress").style.width = `${run.total_posts ? (run.processed_posts / run.total_posts) * 100 : 0}%`;
-    if ($("#run-eta")) $("#run-eta").textContent = run.estimated_wait_text;
-    $("#run-posts").textContent = run.posts_count;
-    $("#run-comments").textContent = run.comments_count;
-    if ($("#run-media")) $("#run-media").textContent = run.media_files_count || 0;
-    $("#run-error").textContent = run.error || "";
-    if (["queued", "running"].includes(run.status)) {
+    renderRunState(run);
+    if (["queued", "running", "paused"].includes(run.status)) {
       setTimeout(pollRun, 1200);
     } else {
       location.reload();

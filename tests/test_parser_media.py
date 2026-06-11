@@ -1,10 +1,14 @@
+import asyncio
 import tempfile
 import unittest
 from pathlib import Path
 
+from app.db import Database
 from app.parser import (
     _prepare_media,
     _publication_numbers,
+    _unprocessed_messages,
+    _wait_until_resumed,
     build_parse_preview,
 )
 from app.targets import TelegramTarget
@@ -97,6 +101,25 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
         )
         self.assertEqual(numbers, {8: 2, 23: 5, 42: 6})
 
+    async def test_paused_parser_waits_until_run_is_resumed(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as root:
+            db = Database(str(Path(root) / "test.sqlite3"))
+            db.open()
+            run_id = db.create_parse_run(
+                "https://t.me/example",
+                "channel",
+                "example",
+                3,
+            )
+            db.update_parse_run(run_id, status="paused")
+            waiter = asyncio.create_task(_wait_until_resumed(db, run_id))
+            await asyncio.sleep(0.05)
+            self.assertFalse(waiter.done())
+
+            db.update_parse_run(run_id, status="running")
+            self.assertTrue(await asyncio.wait_for(waiter, timeout=1))
+            db.close()
+
     def test_empty_limit_previews_all_available_posts(self):
         preview = build_parse_preview(
             TelegramTarget(kind="channel", channel="example"),
@@ -119,6 +142,14 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
             download_media=False,
         )
         self.assertEqual(preview["posts_count"], 1200)
+
+    def test_resume_skips_already_processed_telegram_ids(self):
+        messages = [
+            type("Message", (), {"id": message_id})()
+            for message_id in (50, 49, 48, 47)
+        ]
+        pending = _unprocessed_messages(messages, {50, 49})
+        self.assertEqual([message.id for message in pending], [48, 47])
 
 
 if __name__ == "__main__":

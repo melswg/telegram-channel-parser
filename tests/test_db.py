@@ -75,6 +75,27 @@ class WebDatabaseTests(unittest.TestCase):
             83,
         )
 
+    def test_interrupted_run_is_paused_and_keeps_processed_ids(self):
+        run_id = self.db.create_parse_run(
+            "https://t.me/example",
+            "channel",
+            "example",
+            10,
+        )
+        self.db.update_parse_run(run_id, status="running")
+        self.db.add_run_post_error(run_id, "example", 42, "test")
+        self.db.save_parse_run_queue(run_id, [50, 49, 48, 47])
+
+        self.assertEqual(self.db.pause_interrupted_runs(), 1)
+        run = self.db.get_parse_run(run_id)
+        self.assertEqual(run["status"], "paused")
+        self.assertIn("Продолжите парсинг", run["error"])
+        self.assertEqual(self.db.get_parse_run_post_ids(run_id), {42})
+        self.assertEqual(
+            self.db.get_parse_run_queue(run_id),
+            [50, 49, 48, 47],
+        )
+
 
 if __name__ == "__main__":
     unittest.main()

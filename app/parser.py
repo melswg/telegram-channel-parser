@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import json
 import mimetypes
 from pathlib import Path
@@ -124,6 +125,22 @@ def _sender_name(sender) -> str:
         ) if part
     )
     return name or getattr(sender, "title", None) or ""
+
+
+def _unprocessed_messages(messages: list, processed_ids: set[int]) -> list:
+    return [
+        message for message in messages
+        if int(getattr(message, "id", 0)) not in processed_ids
+    ]
+
+
+async def _wait_until_resumed(db: Database, run_id: int) -> bool:
+    while True:
+        status = db.get_parse_run_status(run_id)
+        if status == "paused":
+            await asyncio.sleep(0.25)
+            continue
+        return status in {"queued", "running"}
 
 
 def _write_json(path: Path, payload: dict) -> None:
@@ -343,6 +360,7 @@ async def execute_parse_run(
     limit: int | None = 10,
     db_path: str = "db.sqlite3",
     download_media: bool = False,
+    resume: bool = False,
 ) -> dict:
     """Execute one parse run and persist all status updates."""
     settings = LocalSettings.load_effective()
@@ -358,24 +376,78 @@ async def execute_parse_run(
     db = Database(config.db_path)
     db.open()
     tg = TelegramBackend(config.api_id, config.api_hash, config.session_name)
-    posts: list[dict] = []
-    warnings: list[str] = []
-    save_path = ""
-    media_files_count = 0
+    existing_run = db.get_parse_run(run_id) or {}
+    processed_ids = (
+        db.get_parse_run_post_ids(run_id) if resume else set()
+    )
+    existing_processed = len(processed_ids)
+    posts_count = int(existing_run.get("posts_count") or 0)
+    comments_count = int(existing_run.get("comments_count") or 0)
+    warnings: list[str] = list(existing_run.get("warnings") or [])
+    save_path = str(existing_run.get("save_path") or "")
+    media_files_count = int(existing_run.get("media_files_count") or 0)
 
-    db.update_parse_run(run_id, status="running")
+    if db.get_parse_run_status(run_id) != "paused":
+        db.update_parse_run(run_id, status="running", error="")
     try:
+        if not await _wait_until_resumed(db, run_id):
+            return db.get_parse_run(run_id) or {}
         await tg.connect()
         entity, channel_model = await tg.resolve_channel(target.telegram_identifier)
         channel_db_id = db.upsert_channel(channel_model)
 
-        if target.kind == "post":
+        queued_ids = db.get_parse_run_queue(run_id) if resume else []
+        if queued_ids:
+            pending_ids = [
+                post_id for post_id in queued_ids
+                if post_id not in processed_ids
+            ]
+            loaded = (
+                await tg.client.get_messages(entity, ids=pending_ids)
+                if pending_ids else []
+            )
+            loaded_messages = (
+                list(loaded)
+                if isinstance(loaded, (list, tuple))
+                else [loaded]
+            )
+            by_id = {
+                int(message.id): message
+                for message in loaded_messages
+                if message and getattr(message, "id", None)
+            }
+            missing_ids = [
+                post_id for post_id in pending_ids if post_id not in by_id
+            ]
+            for post_id in missing_ids:
+                message = (
+                    f"Публикация Telegram ID #{post_id} была удалена или "
+                    "стала недоступна во время паузы."
+                )
+                warnings.append(message)
+                db.add_run_post_error(
+                    run_id, channel_model.username, post_id, message
+                )
+            existing_processed += len(missing_ids)
+            messages = [
+                by_id[post_id] for post_id in pending_ids if post_id in by_id
+            ]
+            total_posts = len(queued_ids)
+        elif target.kind == "post":
             msg = await tg.client.get_messages(entity, ids=target.post_id)
             if not msg or not getattr(msg, "id", None):
                 raise ValueError(f"Пост @{target.channel}/{target.post_id} не найден.")
             messages = [msg]
+            total_posts = 1
         else:
             messages = [msg async for msg in tg.iter_posts(entity, limit=limit)]
+            total_posts = len(messages)
+        if not queued_ids:
+            db.save_parse_run_queue(
+                run_id,
+                [int(message.id) for message in messages],
+            )
+        pending_messages = _unprocessed_messages(messages, processed_ids)
 
         if target.kind == "channel" and limit is None:
             publication_numbers = {
@@ -388,15 +460,19 @@ async def execute_parse_run(
                 entity,
                 {msg.id for msg in messages},
             )
-        db.update_parse_run(run_id, total_posts=len(messages))
-        for index, msg in enumerate(messages, start=1):
+        db.update_parse_run(run_id, total_posts=total_posts)
+        for offset, msg in enumerate(pending_messages, start=1):
+            if not await _wait_until_resumed(db, run_id):
+                return db.get_parse_run(run_id) or {}
+            processed_posts = existing_processed + offset
             try:
                 parsed, post_path, media_warnings, post_media_count = await _parse_message(
                     tg, db, entity, channel_model, channel_db_id,
                     msg, run_id, save_dir, target, download_media,
                     publication_numbers.get(msg.id),
                 )
-                posts.append(parsed)
+                posts_count += 1
+                comments_count += parsed["comments_count"]
                 warnings.extend(media_warnings)
                 media_files_count += post_media_count
                 if target.kind == "post":
@@ -414,28 +490,36 @@ async def execute_parse_run(
             finally:
                 db.update_parse_run(
                     run_id,
-                    processed_posts=index,
-                    posts_count=len(posts),
-                    comments_count=sum(post["comments_count"] for post in posts),
+                    processed_posts=processed_posts,
+                    posts_count=posts_count,
+                    comments_count=comments_count,
                     media_files_count=media_files_count,
                     warnings_json=json.dumps(warnings, ensure_ascii=False),
                 )
 
         if target.kind == "channel":
+            run_posts = (db.get_parse_run(run_id) or {}).get("posts", [])
+            all_posts = [
+                post
+                for item in run_posts
+                if not item.get("error")
+                for post in [db.get_parsed_post(item["channel"], item["post_id"])]
+                if post
+            ]
             summary = {
                 "run_id": run_id,
                 "channel": channel_model.username,
                 "channel_title": channel_model.title,
                 "source_url": target.canonical_url,
                 "parsed_at": now_iso(),
-                "posts_count": len(posts),
-                "comments_count": sum(post["comments_count"] for post in posts),
+                "posts_count": posts_count,
+                "comments_count": comments_count,
                 "media_files_count": media_files_count,
                 "media_directory": (
                     "В каждом каталоге поста: media/" if media_files_count else None
                 ),
                 "warnings": warnings,
-                "posts": posts,
+                "posts": all_posts,
             }
             summary_path = (
                 save_dir / channel_model.username / f"channel_run_{run_id}.json"
@@ -449,8 +533,8 @@ async def execute_parse_run(
             status=status,
             finished_at=now_iso(),
             save_path=save_path,
-            posts_count=len(posts),
-            comments_count=sum(post["comments_count"] for post in posts),
+            posts_count=posts_count,
+            comments_count=comments_count,
             media_files_count=media_files_count,
             warnings_json=json.dumps(warnings, ensure_ascii=False),
         )
