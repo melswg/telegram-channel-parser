@@ -20,7 +20,7 @@
 </section>
 <article class="card post-detail">
   <div class="post-meta">
-    <span>{{ post.date }}</span>
+    <span>{{ post.date|post_date }}</span>
     {% if post.has_media %}<span class="badge">{{ post.media_type or "media" }}</span>{% endif %}
     {% if post.views is not none %}<span>{{ post.views }} просмотров</span>{% endif %}
   </div>

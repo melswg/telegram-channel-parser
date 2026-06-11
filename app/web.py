@@ -6,6 +6,7 @@ import asyncio
 import os
 import re
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 from typing import Literal
 
@@ -40,6 +41,19 @@ templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 auth_manager = TelegramAuthManager()
 parse_lock = asyncio.Lock()
 running_tasks: set[asyncio.Task] = set()
+
+
+def format_post_date(value: str | None) -> str:
+    if not value:
+        return "дата неизвестна"
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return str(value)
+    return parsed.strftime("%d.%m.%Y, %H:%M")
+
+
+templates.env.filters["post_date"] = format_post_date
 
 
 def open_db() -> Database:

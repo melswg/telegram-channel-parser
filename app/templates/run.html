@@ -45,7 +45,7 @@
     {% else %}
     <a class="run-row" href="/posts/{{ post.channel }}/{{ post.post_id }}">
       <span class="run-icon">P</span>
-      <span class="run-main"><strong>Пост #{{ post.post_id }}</strong><small>{{ post.text[:100] or "Без текста" }}</small></span>
+      <span class="run-main"><strong>Пост #{{ post.post_id }}</strong><small>{{ post.date|post_date }} · {{ post.text[:100] or "Без текста" }}</small></span>
       <span class="run-count">{{ post.comments_count }} комментариев</span><span class="row-arrow">›</span>
     </a>
     {% endif %}
