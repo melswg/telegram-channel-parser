@@ -235,7 +235,8 @@ class TelegramBackend:
 
         # Document with audio attributes
         if isinstance(media, MessageMediaDocument):
-            attrs = getattr(media, "attributes", []) or []
+            document = getattr(media, "document", None)
+            attrs = getattr(document, "attributes", []) or []
             for attr in attrs:
                 if isinstance(attr, DocumentAttributeAudio):
                     if attr.voice:
@@ -245,7 +246,7 @@ class TelegramBackend:
                 if hasattr(attr, "voice") and attr.voice:
                     return True, "voice"
 
-            mime = getattr(media.document, "mime_type", "") if media.document else ""
+            mime = getattr(document, "mime_type", "") if document else ""
             if mime and mime.startswith("audio/"):
                 return True, "audio"
             attr_names = {type(attr).__name__ for attr in attrs}
@@ -256,6 +257,10 @@ class TelegramBackend:
             if "DocumentAttributeVideo" in attr_names:
                 if any(getattr(attr, "round_message", False) for attr in attrs):
                     return False, "video_note"
+                return False, "video"
+            if getattr(media, "round", False):
+                return False, "video_note"
+            if getattr(media, "video", False) or mime.startswith("video/"):
                 return False, "video"
             if mime.startswith("image/"):
                 return False, "image"
