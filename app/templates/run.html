@@ -26,6 +26,7 @@
     <span id="run-progress-text">{{ run.processed_posts }} / {{ run.total_posts }} постов</span>
   </div>
   <div class="progress-track"><i id="run-progress" style="width: {{ (run.processed_posts * 100 / run.total_posts) if run.total_posts else 0 }}%"></i></div>
+  <p id="run-eta" class="run-eta">{{ run.estimated_wait_text }}</p>
   <div class="run-metrics">
     <div><strong id="run-posts">{{ run.posts_count }}</strong><span>постов</span></div>
     <div><strong id="run-comments">{{ run.comments_count }}</strong><span>комментариев</span></div>

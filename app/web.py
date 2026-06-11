@@ -7,7 +7,7 @@ import mimetypes
 import os
 import re
 from contextlib import asynccontextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from pathlib import Path
 from typing import Literal
 
@@ -111,6 +111,58 @@ def post_preview(post: dict) -> str:
     if text and media_text:
         return f"{text} · {media_text}"
     return text or media_text or "Публикация без текста"
+
+
+def estimate_remaining_seconds(
+    run: dict,
+    current_time: datetime | None = None,
+) -> int | None:
+    processed = int(run.get("processed_posts") or 0)
+    total = int(run.get("total_posts") or 0)
+    if run.get("status") not in {"running", "paused"}:
+        return 0 if run.get("status") in {"success", "partial"} else None
+    if processed <= 0 or total <= processed:
+        return 0 if total and processed >= total else None
+    try:
+        started_at = datetime.fromisoformat(
+            str(run.get("started_at") or "").replace("Z", "+00:00")
+        )
+    except (TypeError, ValueError):
+        return None
+    if started_at.tzinfo is None:
+        started_at = started_at.replace(tzinfo=timezone.utc)
+    now = current_time or datetime.now(timezone.utc)
+    elapsed = max((now - started_at).total_seconds(), 1)
+    return max(0, round((elapsed / processed) * (total - processed)))
+
+
+def format_wait_time(seconds: int | None) -> str:
+    if seconds is None:
+        return "Оцениваем после первого обработанного поста…"
+    if seconds <= 0:
+        return "Завершается…"
+    minutes = max(1, round(seconds / 60))
+    hours, minutes = divmod(minutes, 60)
+    if hours and minutes:
+        return f"Примерно {hours} ч {minutes} мин осталось"
+    if hours:
+        return f"Примерно {hours} ч осталось"
+    return f"Примерно {minutes} мин осталось"
+
+
+def enrich_run_estimate(run: dict) -> dict:
+    remaining = estimate_remaining_seconds(run)
+    run["estimated_remaining_seconds"] = remaining
+    status = run.get("status")
+    if status in {"success", "partial"}:
+        run["estimated_wait_text"] = "Парсинг завершён"
+    elif status == "failed":
+        run["estimated_wait_text"] = "Парсинг остановлен из-за ошибки"
+    elif status == "queued":
+        run["estimated_wait_text"] = "Ожидает запуска…"
+    else:
+        run["estimated_wait_text"] = format_wait_time(remaining)
+    return run
 
 
 def resolve_media_path(
@@ -380,6 +432,7 @@ async def run_page(request: Request, run_id: int):
         db.close()
     if not run:
         raise HTTPException(status_code=404, detail="Запуск не найден.")
+    enrich_run_estimate(run)
     return templates.TemplateResponse(
         request=request,
         name="run.html",
@@ -623,7 +676,7 @@ async def get_run(run_id: int):
         db.close()
     if not run:
         raise HTTPException(status_code=404, detail="Запуск не найден.")
-    return run
+    return enrich_run_estimate(run)
 
 
 @app.get("/api/export/{scope}/{identifier}")

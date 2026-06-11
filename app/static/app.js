@@ -487,6 +487,7 @@ async function pollRun() {
     status.className = `status-badge status-${run.status}`;
     $("#run-progress-text").textContent = `${run.processed_posts} / ${run.total_posts} постов`;
     $("#run-progress").style.width = `${run.total_posts ? (run.processed_posts / run.total_posts) * 100 : 0}%`;
+    if ($("#run-eta")) $("#run-eta").textContent = run.estimated_wait_text;
     $("#run-posts").textContent = run.posts_count;
     $("#run-comments").textContent = run.comments_count;
     if ($("#run-media")) $("#run-media").textContent = run.media_files_count || 0;

@@ -272,6 +272,7 @@ a.run-row:hover { background: rgba(255,255,255,.025); }
 .run-status-card { margin-bottom: 45px; }
 .progress-track { height: 5px; margin: 18px 0 25px; border-radius: 99px; background: #262831; overflow: hidden; }
 .progress-track i { display: block; height: 100%; background: linear-gradient(90deg, #6757ec, #998cff); transition: width .35s; }
+.run-eta { margin: -12px 0 22px; color: var(--muted); font-size: 11px; }
 .run-metrics { display: grid; grid-template-columns: repeat(4, 1fr); }
 .run-metrics div { border-right: 1px solid var(--line); padding: 6px 20px; }
 .run-metrics div:first-child { padding-left: 0; }

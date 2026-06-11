@@ -1,9 +1,12 @@
 import unittest
 
 import tempfile
+from datetime import datetime, timezone
 from pathlib import Path
 
 from app.web import (
+    estimate_remaining_seconds,
+    format_wait_time,
     format_media_duration,
     format_post_date,
     media_type_label,
@@ -50,6 +53,30 @@ class WebFormattingTests(unittest.TestCase):
 
     def test_media_type_has_readable_label(self):
         self.assertEqual(media_type_label("video_note"), "Видеосообщение")
+
+    def test_estimates_remaining_parse_time_from_current_rate(self):
+        run = {
+            "status": "running",
+            "started_at": "2026-06-12T10:00:00+00:00",
+            "processed_posts": 2,
+            "total_posts": 10,
+        }
+        self.assertEqual(
+            estimate_remaining_seconds(
+                run,
+                datetime(2026, 6, 12, 10, 2, tzinfo=timezone.utc),
+            ),
+            480,
+        )
+        self.assertEqual(format_wait_time(480), "Примерно 8 мин осталось")
+
+    def test_wait_estimate_requires_processed_post(self):
+        self.assertIsNone(estimate_remaining_seconds({
+            "status": "running",
+            "started_at": "2026-06-12T10:00:00+00:00",
+            "processed_posts": 0,
+            "total_posts": 10,
+        }))
 
     def test_media_path_cannot_escape_post_directory(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as root:
