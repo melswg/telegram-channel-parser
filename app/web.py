@@ -268,6 +268,7 @@ async def lifespan(_: FastAPI):
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+    await auth_manager.shutdown()
 
 
 app = FastAPI(
@@ -515,6 +516,27 @@ async def send_code(payload: PhonePayload):
         return await auth_manager.send_code(payload.phone)
     except ValueError as exc:
         raise api_error(exc) from exc
+
+
+@app.post("/api/setup/resend-code")
+async def resend_code():
+    try:
+        return await auth_manager.resend_code()
+    except ValueError as exc:
+        raise api_error(exc) from exc
+
+
+@app.post("/api/setup/qr-login")
+async def start_qr_login():
+    try:
+        return await auth_manager.start_qr_login()
+    except ValueError as exc:
+        raise api_error(exc) from exc
+
+
+@app.get("/api/setup/qr-login")
+async def qr_login_status():
+    return await auth_manager.qr_login_status()
 
 
 @app.post("/api/setup/sign-in")

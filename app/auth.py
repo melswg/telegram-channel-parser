@@ -3,9 +3,13 @@
 from __future__ import annotations
 
 import asyncio
+import base64
+import io
 from pathlib import Path
 from typing import Any
 
+import qrcode
+from qrcode.image.svg import SvgPathImage
 from telethon import TelegramClient, errors, functions
 from telethon.sessions import MemorySession
 from telethon.tl import types
@@ -20,12 +24,24 @@ class TelegramAuthManager:
         self.client: TelegramClient | None = None
         self.phone = ""
         self.phone_code_hash = ""
+        self.qr_login = None
+        self.qr_wait_task: asyncio.Task | None = None
+        self.qr_state: dict[str, Any] = {"state": "idle"}
         self._lock = asyncio.Lock()
 
     async def _disconnect(self) -> None:
         if self.client:
             await self.client.disconnect()
         self.client = None
+
+    async def _clear_qr(self) -> None:
+        task = self.qr_wait_task
+        self.qr_wait_task = None
+        self.qr_login = None
+        if task and task is not asyncio.current_task() and not task.done():
+            task.cancel()
+            await asyncio.gather(task, return_exceptions=True)
+        self.qr_state = {"state": "idle"}
 
     async def _new_client(self, settings: LocalSettings) -> TelegramClient:
         await self._disconnect()
@@ -194,6 +210,15 @@ class TelegramAuthManager:
                 "Пройдите первый шаг настройки."
             )
             return result
+        qr_state = self.qr_state.get("state")
+        if self.client and qr_state in {"waiting_for_scan", "2fa_required"}:
+            result["state"] = "needs_login"
+            result["reason"] = (
+                "QR-вход ожидает подтверждения в Telegram."
+                if qr_state == "waiting_for_scan"
+                else "QR подтверждён. Для завершения нужен пароль 2FA."
+            )
+            return result
         result["state"] = "needs_login"
         if not settings.session_file.exists():
             result["reason"] = (
@@ -237,6 +262,7 @@ class TelegramAuthManager:
         settings = LocalSettings.load_effective()
         async with self._lock:
             try:
+                await self._clear_qr()
                 client = await self._new_client(settings)
                 if await client.is_user_authorized():
                     user = await client.get_me()
@@ -289,6 +315,120 @@ class TelegramAuthManager:
                     f"Причина от Telegram: {type(exc).__name__}. Что сделать: "
                     "проверьте номер и повторите попытку позже."
                 ) from exc
+
+    async def resend_code(self) -> dict[str, Any]:
+        async with self._lock:
+            if not self.client or not self.phone or not self.phone_code_hash:
+                raise ValueError(
+                    "Повторная отправка недоступна. Почему: активный запрос "
+                    "кода не найден. Что сделать: снова введите номер и "
+                    "запросите код."
+                )
+            try:
+                sent = await self.client(functions.auth.ResendCodeRequest(
+                    self.phone,
+                    self.phone_code_hash,
+                ))
+                if isinstance(sent, types.auth.SentCodeSuccess):
+                    raise ValueError(
+                        "Telegram сообщил, что вход уже завершён. Обновите страницу."
+                    )
+                self.phone_code_hash = sent.phone_code_hash
+                return {
+                    "state": "code_sent",
+                    **self._code_delivery(sent),
+                }
+            except errors.SendCodeUnavailableError as exc:
+                raise ValueError(
+                    "Telegram не разрешил другой способ доставки. Почему: для "
+                    "этого номера сейчас доступен только первоначальный способ. "
+                    "Что сделать: проверьте служебный чат 777000 или войдите по QR."
+                ) from exc
+            except errors.PhoneCodeExpiredError as exc:
+                await self._disconnect()
+                self.phone_code_hash = ""
+                raise ValueError(
+                    "Запрос кода истёк. Что сделать: вернитесь к номеру и "
+                    "создайте новый запрос."
+                ) from exc
+            except errors.FloodWaitError as exc:
+                raise ValueError(
+                    "Telegram ограничил повторную отправку. Что сделать: "
+                    f"подождите {exc.seconds} сек. и повторите."
+                ) from exc
+            except errors.RPCError as exc:
+                raise ValueError(
+                    "Telegram не переключил способ доставки. "
+                    f"Техническая причина: {type(exc).__name__}. "
+                    "Используйте QR-вход или повторите позже."
+                ) from exc
+
+    @staticmethod
+    def _qr_data_url(url: str) -> str:
+        image = qrcode.make(
+            url,
+            image_factory=SvgPathImage,
+            box_size=8,
+            border=2,
+        )
+        output = io.BytesIO()
+        image.save(output)
+        encoded = base64.b64encode(output.getvalue()).decode("ascii")
+        return f"data:image/svg+xml;base64,{encoded}"
+
+    async def _wait_for_qr(self) -> None:
+        try:
+            user = await self.qr_login.wait()
+            result = await self._complete(user)
+            self.qr_state = result
+        except errors.SessionPasswordNeededError:
+            self.qr_state = {
+                "state": "2fa_required",
+                "message": "QR подтверждён. Введите пароль 2FA.",
+            }
+        except asyncio.TimeoutError:
+            self.qr_state = {
+                "state": "expired",
+                "message": "QR-код истёк. Создайте новый.",
+            }
+        except asyncio.CancelledError:
+            raise
+        except Exception as exc:
+            self.qr_state = {
+                "state": "failed",
+                "message": (
+                    "QR-вход не завершён. "
+                    f"Техническая причина: {type(exc).__name__}."
+                ),
+            }
+
+    async def start_qr_login(self) -> dict[str, Any]:
+        settings = LocalSettings.load_effective()
+        async with self._lock:
+            await self._clear_qr()
+            client = await self._new_client(settings)
+            if await client.is_user_authorized():
+                user = await client.get_me()
+                return await self._complete(user)
+            self.phone = ""
+            self.phone_code_hash = ""
+            self.qr_login = await client.qr_login()
+            self.qr_state = {
+                "state": "waiting_for_scan",
+                "message": (
+                    "Откройте Telegram → Настройки → Устройства → "
+                    "Подключить устройство и отсканируйте QR-код."
+                ),
+            }
+            self.qr_wait_task = asyncio.create_task(self._wait_for_qr())
+            return {
+                **self.qr_state,
+                "qr_image": self._qr_data_url(self.qr_login.url),
+                "expires_at": self.qr_login.expires.isoformat(),
+            }
+
+    async def qr_login_status(self) -> dict[str, Any]:
+        return dict(self.qr_state)
 
     async def sign_in(self, code: str) -> dict[str, Any]:
         code = "".join((code or "").split())
@@ -404,6 +544,7 @@ class TelegramAuthManager:
     async def reset(self) -> dict[str, Any]:
         settings = LocalSettings.load_effective()
         async with self._lock:
+            await self._clear_qr()
             await self._disconnect()
             remote_logout = "not_needed"
             if settings.configured and settings.session_file.exists():
@@ -474,3 +615,8 @@ class TelegramAuthManager:
                     "session, api_id, api_hash и данные профиля удалены."
                 ),
             }
+
+    async def shutdown(self) -> None:
+        async with self._lock:
+            await self._clear_qr()
+            await self._disconnect()

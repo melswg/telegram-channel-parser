@@ -158,6 +158,13 @@ if (telegramLoginForm) {
   const codeField = $("#code-field");
   const buttonLabel = $(".login-button-label", telegramLoginForm);
   const changePhoneButton = $("#change-phone");
+  const resendCodeButton = $("#resend-code");
+  const startQrButton = $("#start-qr-login");
+  const qrPanel = $("#qr-login-panel");
+  const qrImage = $("#qr-login-image");
+  const qrMessage = $("#qr-login-message");
+  const qr2faButton = $("#qr-2fa-submit");
+  let qrPollTimer = null;
 
   function setLoginMode(mode) {
     telegramLoginForm.dataset.mode = mode;
@@ -170,6 +177,7 @@ if (telegramLoginForm) {
       ? "Завершить вход"
       : "Проверить и отправить код";
     changePhoneButton.hidden = !waitingForCode;
+    resendCodeButton.hidden = !waitingForCode;
     if (waitingForCode) {
       codeInput.placeholder = "Введите код";
       codeInput.focus();
@@ -232,6 +240,87 @@ if (telegramLoginForm) {
     phoneInput.disabled = false;
     phoneInput.focus();
     message(telegramLoginForm, "Введите номер заново.");
+  });
+
+  resendCodeButton.addEventListener("click", async () => {
+    resendCodeButton.disabled = true;
+    message(telegramLoginForm, "Запрашиваем следующий доступный способ…");
+    try {
+      const result = await api("/api/setup/resend-code", { method: "POST" });
+      message(telegramLoginForm, result.delivery_message);
+    } catch (error) {
+      message(telegramLoginForm, error.message, true);
+    } finally {
+      resendCodeButton.disabled = false;
+    }
+  });
+
+  async function pollQrLogin() {
+    try {
+      const result = await api("/api/setup/qr-login");
+      qrMessage.textContent = result.message || "Ожидаем подтверждение…";
+      if (result.state === "authorized") {
+        clearTimeout(qrPollTimer);
+        showOnboardingStep("success");
+        return;
+      }
+      if (result.state === "2fa_required") {
+        clearTimeout(qrPollTimer);
+        qr2faButton.hidden = false;
+        passwordInput.focus();
+        message(
+          telegramLoginForm,
+          "QR подтверждён. Введите пароль 2FA и завершите вход.",
+          true,
+        );
+        return;
+      }
+      if (["expired", "failed"].includes(result.state)) return;
+      qrPollTimer = setTimeout(pollQrLogin, 1200);
+    } catch (error) {
+      qrMessage.textContent = error.message;
+    }
+  }
+
+  startQrButton.addEventListener("click", async () => {
+    startQrButton.disabled = true;
+    clearTimeout(qrPollTimer);
+    try {
+      const result = await api("/api/setup/qr-login", { method: "POST" });
+      if (result.state === "authorized") {
+        showOnboardingStep("success");
+        return;
+      }
+      qrImage.src = result.qr_image;
+      qrMessage.textContent = result.message;
+      qr2faButton.hidden = true;
+      qrPanel.hidden = false;
+      qrPollTimer = setTimeout(pollQrLogin, 500);
+    } catch (error) {
+      message(telegramLoginForm, error.message, true);
+    } finally {
+      startQrButton.disabled = false;
+    }
+  });
+
+  qr2faButton.addEventListener("click", async () => {
+    if (!passwordInput.value) {
+      message(telegramLoginForm, "Введите пароль 2FA в поле выше.", true);
+      passwordInput.focus();
+      return;
+    }
+    qr2faButton.disabled = true;
+    try {
+      const result = await api("/api/setup/2fa", {
+        method: "POST",
+        body: JSON.stringify({ password: passwordInput.value }),
+      });
+      if (result.state === "authorized") showOnboardingStep("success");
+    } catch (error) {
+      message(telegramLoginForm, error.message, true);
+    } finally {
+      qr2faButton.disabled = false;
+    }
   });
 }
 

@@ -149,9 +149,21 @@
         <button class="primary-button onboarding-primary" type="submit">
           <span class="login-button-label">Проверить и отправить код</span><b>→</b>
         </button>
-        <button id="change-phone" class="secondary-button" type="button" hidden>Изменить номер</button>
+        <div class="login-alternatives">
+          <button id="resend-code" class="secondary-button" type="button" hidden>Запросить другой способ</button>
+          <button id="change-phone" class="secondary-button" type="button" hidden>Изменить номер</button>
+          <button id="start-qr-login" class="secondary-button" type="button">Войти по QR без кода</button>
+        </div>
         <p class="form-message"></p>
       </form>
+      <div id="qr-login-panel" class="qr-login-panel" hidden>
+        <img id="qr-login-image" alt="QR-код для входа в Telegram">
+        <div>
+          <strong>Вход без SMS</strong>
+          <p id="qr-login-message">Отсканируйте код в уже авторизованном Telegram.</p>
+          <button id="qr-2fa-submit" class="secondary-button" type="button" hidden>Подтвердить пароль 2FA</button>
+        </div>
+      </div>
       <p class="privacy-line">Код и пароль 2FA используются только для входа и никогда не сохраняются.</p>
     </div>
 

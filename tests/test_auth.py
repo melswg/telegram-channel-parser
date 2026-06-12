@@ -3,7 +3,7 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from telethon.tl import types
+from telethon.tl import functions, types
 
 from app.auth import TelegramAuthManager
 from app.local_settings import LocalSettings
@@ -40,6 +40,15 @@ class FakeLogoutClient:
 
     async def disconnect(self):
         self.disconnected = True
+
+
+class FakeResendClient:
+    async def __call__(self, request):
+        self.request = request
+        return types.auth.SentCode(
+            type=types.auth.SentCodeTypeSms(length=5),
+            phone_code_hash="next-hash",
+        )
 
 
 class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
@@ -95,6 +104,27 @@ class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
             result["delivery_message"],
             "Код отправлен по SMS на указанный номер.",
         )
+
+    async def test_resend_code_uses_existing_phone_hash(self):
+        manager = TelegramAuthManager()
+        manager.client = FakeResendClient()
+        manager.phone = "+79990000000"
+        manager.phone_code_hash = "first-hash"
+
+        result = await manager.resend_code()
+
+        self.assertEqual(result["delivery"], "sms")
+        self.assertEqual(manager.phone_code_hash, "next-hash")
+        self.assertIsInstance(
+            manager.client.request,
+            functions.auth.ResendCodeRequest,
+        )
+
+    def test_qr_data_url_is_local_svg(self):
+        data_url = TelegramAuthManager._qr_data_url(
+            "tg://login?token=test"
+        )
+        self.assertTrue(data_url.startswith("data:image/svg+xml;base64,"))
 
     async def test_reset_removes_session_and_all_login_data(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as root:

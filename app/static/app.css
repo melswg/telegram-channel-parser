@@ -89,6 +89,21 @@ h1 span { color: #8f939e; }
 .status-dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); box-shadow: 0 0 0 5px rgba(255,255,255,.04); }
 .status-card.authorized .status-dot { background: var(--green); box-shadow: 0 0 12px rgba(79,209,161,.6); }
 .status-card.warning .status-dot { background: var(--yellow); }
+.login-alternatives { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 10px; }
+.login-alternatives button { margin: 0; }
+.qr-login-panel {
+  grid-template-columns: 180px 1fr;
+  gap: 18px;
+  align-items: center;
+  margin-top: 18px;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: rgba(255,255,255,.025);
+}
+.qr-login-panel:not([hidden]) { display: grid; }
+.qr-login-panel img { width: 180px; height: 180px; padding: 8px; border-radius: 10px; background: white; }
+.qr-login-panel p { margin: 6px 0 0; color: var(--muted); font-size: 12px; }
 .card {
   position: relative; padding: 28px; border: 1px solid var(--line); border-radius: var(--radius);
   background: linear-gradient(145deg, rgba(23,25,31,.96), rgba(14,15,19,.96));
