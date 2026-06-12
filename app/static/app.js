@@ -327,6 +327,47 @@ if (telegramLoginForm) {
 const parseForm = $("#parse-form");
 if (parseForm) {
   const urlInput = $("#telegram-url");
+  const confirmOverlay = $("#parse-confirm-overlay");
+  const confirmStartButton = $("#parse-confirm-start");
+  const confirmCancelButton = $("#parse-confirm-cancel");
+
+  function requestParseConfirmation(preview) {
+    $("#parse-confirm-message").textContent = preview.confirmation;
+    $("#parse-confirm-count").textContent = String(preview.posts_count);
+    $("#parse-confirm-scope").textContent = preview.all_posts
+      ? "Весь канал"
+      : "Последние";
+    $("#parse-confirm-media").textContent = preview.download_media
+      ? "Включены"
+      : "Выключены";
+    confirmOverlay.hidden = false;
+    confirmStartButton.focus();
+
+    return new Promise((resolve) => {
+      const finish = (accepted) => {
+        confirmOverlay.hidden = true;
+        confirmStartButton.removeEventListener("click", accept);
+        confirmCancelButton.removeEventListener("click", cancel);
+        confirmOverlay.removeEventListener("click", cancelFromBackdrop);
+        document.removeEventListener("keydown", cancelFromKeyboard);
+        resolve(accepted);
+      };
+      const accept = () => finish(true);
+      const cancel = () => finish(false);
+      const cancelFromBackdrop = (event) => {
+        if (event.target === confirmOverlay) cancel();
+      };
+      const cancelFromKeyboard = (event) => {
+        if (event.key === "Escape") cancel();
+      };
+
+      confirmStartButton.addEventListener("click", accept);
+      confirmCancelButton.addEventListener("click", cancel);
+      confirmOverlay.addEventListener("click", cancelFromBackdrop);
+      document.addEventListener("keydown", cancelFromKeyboard);
+    });
+  }
+
   urlInput.addEventListener("input", () => {
     const value = urlInput.value.trim().replace(/^https?:\/\//, "");
     const path = value.replace(/^(t\.me\/|@)/, "").split("/").filter(Boolean);
@@ -353,7 +394,7 @@ if (parseForm) {
         method: "POST",
         body: JSON.stringify(payload),
       });
-      if (!confirm(preview.confirmation)) {
+      if (!await requestParseConfirmation(preview)) {
         message(parseForm, "Запуск отменён. Данные не загружались.");
         busy(parseForm, false);
         return;

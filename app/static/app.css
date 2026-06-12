@@ -147,6 +147,45 @@ label small, form > small, .parse-options small { color: #656a74; font-weight: 4
 .primary-button:hover, .export-buttons a:hover { transform: translateY(-1px); }
 .primary-button:disabled, button:disabled { opacity: .45; cursor: wait; }
 .parse-card .primary-button { width: 100%; justify-content: space-between; padding: 0 19px; }
+.confirmation-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: grid;
+  place-items: center;
+  padding: 20px;
+  background: rgba(7, 8, 11, .82);
+  backdrop-filter: blur(10px);
+}
+.confirmation-overlay[hidden] { display: none; }
+.confirmation-dialog {
+  width: min(520px, 100%);
+  padding: 28px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: linear-gradient(145deg, #17191f, #0e0f13);
+  box-shadow: 0 24px 80px rgba(0, 0, 0, .48);
+}
+.confirmation-dialog h2 { margin: 8px 0 10px; }
+.confirmation-dialog > p { margin: 0; color: var(--muted); line-height: 1.55; }
+.confirmation-facts {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 10px;
+  margin: 22px 0;
+}
+.confirmation-facts span {
+  display: grid;
+  gap: 6px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: rgba(255,255,255,.025);
+}
+.confirmation-facts small { color: var(--muted); }
+.confirmation-actions { display: flex; justify-content: flex-end; gap: 10px; }
+.confirmation-actions button { margin: 0; }
+.confirmation-actions .primary-button { width: auto; }
 .form-message { min-height: 20px; margin: 10px 0 0; color: var(--green); font-size: 12px; }
 .storage-card p, .settings-grid .card > p { color: var(--muted); font-size: 13px; }
 code { padding: 4px 7px; border: 1px solid var(--line); border-radius: 6px; color: #c3bfff; background: rgba(0,0,0,.25); font: 12px ui-monospace, SFMono-Regular, Menlo, monospace; word-break: break-all; }
@@ -403,6 +442,9 @@ footer { padding: 25px; border-top: 1px solid var(--line); color: #555a64; text-
   h1, .page-head h1 { font-size: 36px; }
   .parse-options { grid-template-columns: 1fr; }
   .check-control { justify-content: start; }
+  .confirmation-facts { grid-template-columns: 1fr; }
+  .confirmation-actions { flex-direction: column-reverse; }
+  .confirmation-actions button { width: 100%; }
   .card { padding: 21px; }
   .run-main small { max-width: 190px; }
   .run-metrics div { padding: 6px 10px; }

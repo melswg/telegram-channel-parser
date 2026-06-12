@@ -13,6 +13,7 @@ from app.parser import (
     build_parse_preview,
 )
 from app.targets import TelegramTarget
+from app.telegram import TelegramBackend
 
 
 class FakeDownloadClient:
@@ -26,6 +27,12 @@ class FakeDownloadClient:
         return str(path)
 
 
+class FakeCountClient:
+    async def get_messages(self, _entity, limit):
+        assert limit == 0
+        return type("Messages", (), {"total": 5721})()
+
+
 class FakeTelegramBackend:
     def __init__(self):
         self.client = FakeDownloadClient()
@@ -37,6 +44,12 @@ class FakeTelegramBackend:
 
 
 class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
+    async def test_channel_count_uses_telegram_total_without_history_scan(self):
+        tg = TelegramBackend(1, "hash", "session")
+        tg.client = FakeCountClient()
+
+        self.assertEqual(await tg.count_posts(object()), 5721)
+
     async def test_media_is_downloaded_into_post_media_directory(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as root:
             media_dir = Path(root) / "media"
@@ -171,7 +184,7 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(preview["all_posts"])
         self.assertEqual(
             preview["confirmation"],
-            "Будет загружено 843 публикации. Media включены. Вы согласны?",
+            "Будет загружено 843 публикации. Медиа включены. Вы согласны?",
         )
 
     def test_explicit_limit_is_not_capped_at_200(self):

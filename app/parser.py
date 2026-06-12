@@ -57,7 +57,7 @@ def build_parse_preview(
         "download_media": download_media,
         "confirmation": (
             f"Будет загружено {selected_posts} {noun}. "
-            f"Media {media_state}. Вы согласны?"
+            f"Медиа {media_state}. Вы согласны?"
         ),
     }
 
@@ -88,9 +88,7 @@ async def preview_parse(
                 )
             total_posts = 1
         else:
-            total_posts = 0
-            async for _ in tg.iter_posts(entity):
-                total_posts += 1
+            total_posts = await tg.count_posts(entity)
         return build_parse_preview(
             target,
             total_posts,

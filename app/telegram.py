@@ -124,6 +124,11 @@ class TelegramBackend:
             if msg.message or msg.media:
                 yield msg
 
+    async def count_posts(self, entity) -> int:
+        """Return Telegram's message count without downloading the history."""
+        messages = await self.client.get_messages(entity, limit=0)
+        return int(getattr(messages, "total", 0) or 0)
+
     async def iter_comments(self, entity, post_msg_id: int,
                             limit: Optional[int] = None) -> AsyncIterator[Message]:
         """Iterate comments/replies for a channel post.

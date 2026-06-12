@@ -64,6 +64,23 @@
   </aside>
 </section>
 
+<section id="parse-confirm-overlay" class="confirmation-overlay" hidden>
+  <article class="confirmation-dialog" role="dialog" aria-modal="true" aria-labelledby="parse-confirm-title">
+    <span class="eyebrow">ПОДТВЕРЖДЕНИЕ ЗАПУСКА</span>
+    <h2 id="parse-confirm-title">Начать парсинг?</h2>
+    <p id="parse-confirm-message"></p>
+    <div class="confirmation-facts">
+      <span><small>Публикации</small><strong id="parse-confirm-count">0</strong></span>
+      <span><small>Диапазон</small><strong id="parse-confirm-scope">Последние</strong></span>
+      <span><small>Медиа</small><strong id="parse-confirm-media">Выключены</strong></span>
+    </div>
+    <div class="confirmation-actions">
+      <button id="parse-confirm-cancel" class="secondary-button" type="button">Отмена</button>
+      <button id="parse-confirm-start" class="primary-button" type="button">Начать парсинг <b>→</b></button>
+    </div>
+  </article>
+</section>
+
 <section class="section-block">
   <div class="section-heading"><div><span class="eyebrow">ACTIVITY</span><h2>Последние запуски</h2></div></div>
   <div class="run-list">
