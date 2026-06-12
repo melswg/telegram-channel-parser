@@ -3,6 +3,8 @@ import unittest
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
 
+from telethon.tl import types
+
 from app.auth import TelegramAuthManager
 from app.local_settings import LocalSettings
 
@@ -64,6 +66,35 @@ class TelegramAuthTests(unittest.IsolatedAsyncioTestCase):
 
         self.assertEqual(result["state"], "authorized")
         manager.sign_in_2fa.assert_awaited_once_with("secret")
+
+    def test_app_code_delivery_explains_that_it_is_not_sms(self):
+        sent = MagicMock(
+            type=types.auth.SentCodeTypeApp(length=5),
+            timeout=60,
+            next_type=types.auth.CodeTypeSms(),
+        )
+
+        result = TelegramAuthManager._code_delivery(sent)
+
+        self.assertEqual(result["delivery"], "telegram_app")
+        self.assertIn("не по SMS", result["delivery_message"])
+        self.assertIn("777000", result["delivery_message"])
+        self.assertIn("60 сек.", result["delivery_message"])
+
+    def test_sms_delivery_is_reported_explicitly(self):
+        sent = MagicMock(
+            type=types.auth.SentCodeTypeSms(length=5),
+            timeout=None,
+            next_type=None,
+        )
+
+        result = TelegramAuthManager._code_delivery(sent)
+
+        self.assertEqual(result["delivery"], "sms")
+        self.assertEqual(
+            result["delivery_message"],
+            "Код отправлен по SMS на указанный номер.",
+        )
 
     async def test_reset_removes_session_and_all_login_data(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as root:

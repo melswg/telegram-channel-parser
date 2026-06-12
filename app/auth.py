@@ -8,6 +8,7 @@ from typing import Any
 
 from telethon import TelegramClient, errors, functions
 from telethon.sessions import MemorySession
+from telethon.tl import types
 
 from .local_settings import LocalSettings, mask_phone
 
@@ -59,6 +60,100 @@ class TelegramAuthManager:
         if result.get("phone"):
             result["phone"] = mask_phone(str(result["phone"]))
         return result
+
+    @staticmethod
+    def _next_delivery_name(next_type: object | None) -> str:
+        names = {
+            types.auth.CodeTypeSms: "SMS",
+            types.auth.CodeTypeCall: "звонок",
+            types.auth.CodeTypeFlashCall: "flash-звонок",
+            types.auth.CodeTypeMissedCall: "пропущенный звонок",
+            types.auth.CodeTypeFragmentSms: "Fragment",
+        }
+        for code_type, name in names.items():
+            if isinstance(next_type, code_type):
+                return name
+        return ""
+
+    @classmethod
+    def _code_delivery(cls, sent) -> dict[str, Any]:
+        sent_type = getattr(sent, "type", None)
+        delivery = "unknown"
+        message = (
+            "Telegram принял запрос кода, но не сообщил приложению понятный "
+            "способ доставки. Проверьте официальный Telegram на других устройствах."
+        )
+
+        if isinstance(sent_type, types.auth.SentCodeTypeApp):
+            delivery = "telegram_app"
+            message = (
+                "Код отправлен не по SMS, а сообщением в официальный чат "
+                "«Telegram» на другом уже авторизованном устройстве. Откройте "
+                "Telegram и найдите служебный чат от аккаунта 777000."
+            )
+        elif isinstance(sent_type, types.auth.SentCodeTypeSms):
+            delivery = "sms"
+            message = "Код отправлен по SMS на указанный номер."
+        elif isinstance(sent_type, types.auth.SentCodeTypeCall):
+            delivery = "call"
+            message = "Код будет продиктован во входящем телефонном звонке."
+        elif isinstance(sent_type, types.auth.SentCodeTypeFlashCall):
+            delivery = "flash_call"
+            message = (
+                "Telegram использует короткий flash-звонок. Код определяется "
+                "по номеру звонящего."
+            )
+        elif isinstance(sent_type, types.auth.SentCodeTypeMissedCall):
+            delivery = "missed_call"
+            message = (
+                "Telegram отправит пропущенный звонок. Кодом являются последние "
+                "цифры номера звонящего."
+            )
+        elif isinstance(sent_type, types.auth.SentCodeTypeEmailCode):
+            delivery = "email"
+            pattern = getattr(sent_type, "email_pattern", "")
+            message = f"Код отправлен на привязанную почту {pattern}."
+        elif isinstance(sent_type, types.auth.SentCodeTypeFragmentSms):
+            delivery = "fragment"
+            message = (
+                "Код доступен через Fragment. Откройте ссылку, которую Telegram "
+                "вернул для этого запроса."
+            )
+        elif isinstance(sent_type, types.auth.SentCodeTypeSmsWord):
+            delivery = "sms_word"
+            message = "Telegram отправил по SMS код в виде одного слова."
+        elif isinstance(sent_type, types.auth.SentCodeTypeSmsPhrase):
+            delivery = "sms_phrase"
+            message = "Telegram отправил по SMS код в виде фразы."
+        elif isinstance(sent_type, types.auth.SentCodeTypeFirebaseSms):
+            delivery = "firebase_sms"
+            message = (
+                "Telegram выбрал Firebase SMS, доступный только официальным "
+                "мобильным приложениям. Откройте официальный Telegram или "
+                "повторите вход позже."
+            )
+        elif isinstance(sent_type, types.auth.SentCodeTypeSetUpEmailRequired):
+            delivery = "email_setup_required"
+            message = (
+                "Telegram требует сначала настроить почту для кодов входа. "
+                "Завершите настройку в официальном приложении Telegram."
+            )
+
+        timeout = getattr(sent, "timeout", None)
+        next_delivery = cls._next_delivery_name(
+            getattr(sent, "next_type", None)
+        )
+        if timeout and next_delivery:
+            message += (
+                f" Через {timeout} сек. Telegram может разрешить следующий "
+                f"способ: {next_delivery}."
+            )
+        return {
+            "delivery": delivery,
+            "delivery_message": message,
+            "retry_after": timeout,
+            "next_delivery": next_delivery or None,
+        }
 
     async def verify_credentials(self, api_id: int, api_hash: str) -> None:
         """Validate credentials with Telegram without creating a session file."""
@@ -156,7 +251,10 @@ class TelegramAuthManager:
                 sent = await client.send_code_request(phone)
                 self.phone = phone
                 self.phone_code_hash = sent.phone_code_hash
-                return {"state": "code_sent"}
+                return {
+                    "state": "code_sent",
+                    **self._code_delivery(sent),
+                }
             except errors.FloodWaitError as exc:
                 await self._disconnect()
                 raise ValueError(

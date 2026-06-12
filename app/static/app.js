@@ -194,7 +194,11 @@ if (telegramLoginForm) {
           showOnboardingStep("success");
         } else {
           setLoginMode("complete-login");
-          message(telegramLoginForm, "Код отправлен в Telegram. Введите его ниже.");
+          message(
+            telegramLoginForm,
+            result.delivery_message ||
+              "Telegram принял запрос кода. Проверьте официальный клиент.",
+          );
         }
       } else {
         message(telegramLoginForm, "Проверяем код и создаём local session…");
