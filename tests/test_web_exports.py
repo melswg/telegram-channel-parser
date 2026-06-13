@@ -5,7 +5,11 @@ import zipfile
 from io import BytesIO
 from pathlib import Path
 
-from app.web_exports import render_export, render_export_archive
+from app.web_exports import (
+    render_export,
+    render_export_archive,
+    write_export_archive,
+)
 
 
 class WebExportTests(unittest.TestCase):
@@ -60,6 +64,34 @@ class WebExportTests(unittest.TestCase):
                 archive.namelist(),
             )
             self.assertIn("media_manifest.json", archive.namelist())
+
+    def test_media_archive_can_be_written_directly_to_disk(self):
+        with tempfile.TemporaryDirectory(dir="/tmp") as root:
+            save_dir = Path(root)
+            media_dir = save_dir / "example" / "42" / "media"
+            media_dir.mkdir(parents=True)
+            (media_dir / "post_42.mp4").write_bytes(b"video")
+            self.posts[0]["media"] = {
+                "downloaded": True,
+                "path": "media/post_42.mp4",
+                "type": "video",
+            }
+            destination = save_dir / "exports" / "result.zip"
+            destination.parent.mkdir()
+
+            media_type, count, size = write_export_archive(
+                self.posts,
+                "json",
+                save_dir,
+                destination,
+            )
+
+            self.assertEqual(media_type, "application/zip")
+            self.assertEqual(count, 1)
+            self.assertEqual(size, destination.stat().st_size)
+            with zipfile.ZipFile(destination) as archive:
+                info = archive.getinfo("media/example/42/post_42.mp4")
+                self.assertEqual(info.compress_type, zipfile.ZIP_STORED)
 
     def test_media_archive_explains_when_files_were_not_downloaded(self):
         with tempfile.TemporaryDirectory(dir="/tmp") as root:

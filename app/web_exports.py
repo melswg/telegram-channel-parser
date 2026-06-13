@@ -5,6 +5,7 @@ from __future__ import annotations
 import csv
 import io
 import json
+import shutil
 import zipfile
 from pathlib import Path
 
@@ -86,6 +87,18 @@ def render_export_archive(
 ) -> tuple[bytes, str, int]:
     """Bundle structured export and previously downloaded media into a ZIP."""
     content, _ = render_export(posts, fmt)
+    files = collect_export_media(posts, save_dir)
+
+    output = io.BytesIO()
+    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
+        _write_archive(archive, content, fmt, files)
+    return output.getvalue(), "application/zip", len(files)
+
+
+def collect_export_media(
+    posts: list[dict],
+    save_dir: Path,
+) -> list[tuple[Path, str, dict]]:
     files: list[tuple[Path, str, dict]] = []
     seen: set[Path] = set()
 
@@ -129,26 +142,77 @@ def render_export_archive(
             "скачиваемых файлов. Что сделать: повторите парсинг с опцией "
             "«Скачивать media»."
         )
+    return files
 
-    output = io.BytesIO()
-    with zipfile.ZipFile(output, "w", compression=zipfile.ZIP_DEFLATED) as archive:
-        archive.writestr(f"data.{fmt}", content)
-        archive.writestr(
-            "MEDIA_INFO.txt",
-            (
-                "Все скачанные файлы находятся в папке media.\n"
-                "Структура: media/<channel>/<post_id>/<filename>.\n"
-                "Описание файлов: media_manifest.json.\n"
-            ),
+
+def _write_archive(
+    archive: zipfile.ZipFile,
+    content: bytes,
+    fmt: str,
+    files: list[tuple[Path, str, dict]],
+) -> None:
+    archive.writestr(f"data.{fmt}", content)
+    archive.writestr(
+        "MEDIA_INFO.txt",
+        (
+            "Все скачанные файлы находятся в папке media.\n"
+            "Структура: media/<channel>/<post_id>/<filename>.\n"
+            "Описание файлов: media_manifest.json.\n"
+        ),
+    )
+    archive.writestr(
+        "media_manifest.json",
+        json.dumps(
+            {"media_files": [item[2] for item in files]},
+            ensure_ascii=False,
+            indent=2,
+        ),
+    )
+    for path, archive_name, _ in files:
+        # Telegram media are already compressed. Storing them avoids wasting
+        # CPU and makes multi-gigabyte exports substantially faster.
+        archive.write(
+            path,
+            archive_name,
+            compress_type=zipfile.ZIP_STORED,
         )
-        archive.writestr(
-            "media_manifest.json",
-            json.dumps(
-                {"media_files": [item[2] for item in files]},
-                ensure_ascii=False,
-                indent=2,
-            ),
+
+
+def write_export_archive(
+    posts: list[dict],
+    fmt: str,
+    save_dir: Path,
+    destination: Path,
+) -> tuple[str, int, int]:
+    """Write a media export to disk so it never occupies server RAM."""
+    content, _ = render_export(posts, fmt)
+    files = collect_export_media(posts, save_dir)
+    required_bytes = (
+        sum(path.stat().st_size for path, _, _ in files)
+        + len(content)
+        + 1024 * 1024
+    )
+    free_bytes = shutil.disk_usage(destination.parent).free
+    if free_bytes < required_bytes:
+        required_gb = required_bytes / (1024 ** 3)
+        free_gb = free_bytes / (1024 ** 3)
+        raise ValueError(
+            "ZIP не создан. Почему: недостаточно свободного места для "
+            f"временного архива (нужно примерно {required_gb:.1f} ГБ, "
+            f"доступно {free_gb:.1f} ГБ). Что сделать: освободите место "
+            "или экспортируйте меньше публикаций."
         )
-        for path, archive_name, _ in files:
-            archive.write(path, archive_name)
-    return output.getvalue(), "application/zip", len(files)
+
+    destination.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        with zipfile.ZipFile(
+            destination,
+            "w",
+            compression=zipfile.ZIP_DEFLATED,
+            allowZip64=True,
+        ) as archive:
+            _write_archive(archive, content, fmt, files)
+    except Exception:
+        destination.unlink(missing_ok=True)
+        raise
+    return "application/zip", len(files), destination.stat().st_size

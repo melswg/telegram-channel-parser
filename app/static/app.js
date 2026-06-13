@@ -421,6 +421,7 @@ $$("[data-export-media]").forEach((toggle) => {
   const panel = toggle.closest(".export-panel");
   const links = $$("[data-export-link]", panel);
   const exportMessage = $(".export-message", panel);
+  let preparingMediaExport = false;
   const updateLinks = () => {
     links.forEach((link) => {
       const url = new URL(link.href);
@@ -436,41 +437,43 @@ $$("[data-export-media]").forEach((toggle) => {
     link.addEventListener("click", async (event) => {
       if (!toggle.checked) return;
       event.preventDefault();
+      if (preparingMediaExport) return;
+      preparingMediaExport = true;
+      links.forEach((item) => item.setAttribute("aria-disabled", "true"));
       if (exportMessage) {
-        exportMessage.textContent = "Собираем ZIP с папкой media…";
+        exportMessage.textContent = (
+          "Собираем ZIP с папкой media на локальном диске. "
+          + "Для большой выгрузки это может занять несколько минут…"
+        );
         exportMessage.classList.remove("error-text");
       }
       try {
-        const response = await fetch(link.href);
-        const contentType = response.headers.get("Content-Type") || "";
-        if (!response.ok) {
-          const payload = contentType.includes("json")
-            ? await response.json()
-            : {};
-          throw new Error(
-            payload.detail ||
-            `Экспорт не выполнен: HTTP ${response.status}.`,
-          );
-        }
-        const blob = await response.blob();
-        const disposition = response.headers.get("Content-Disposition") || "";
-        const match = disposition.match(/filename="([^"]+)"/);
-        const filename = match?.[1] || "telegram_export.zip";
-        const downloadUrl = URL.createObjectURL(blob);
+        const prepareUrl = new URL(link.href);
+        prepareUrl.pathname = `${prepareUrl.pathname}/prepare`;
+        prepareUrl.searchParams.delete("include_media");
+        const result = await api(prepareUrl.toString(), { method: "POST" });
         const anchor = document.createElement("a");
-        anchor.href = downloadUrl;
-        anchor.download = filename;
+        anchor.href = result.download_url;
+        anchor.download = result.filename;
+        document.body.append(anchor);
         anchor.click();
-        setTimeout(() => URL.revokeObjectURL(downloadUrl), 1000);
+        anchor.remove();
         if (exportMessage) {
+          const size = result.size_bytes >= 1024 ** 3
+            ? `${(result.size_bytes / 1024 ** 3).toFixed(1)} ГБ`
+            : `${(result.size_bytes / 1024 ** 2).toFixed(1)} МБ`;
           exportMessage.textContent =
-            "ZIP готов. Все файлы лежат в папке media.";
+            `ZIP готов (${size}, файлов: ${result.media_files}). `
+            + "Загрузка началась; все медиа лежат в папке media.";
         }
       } catch (error) {
         if (exportMessage) {
           exportMessage.textContent = error.message;
           exportMessage.classList.add("error-text");
         }
+      } finally {
+        preparingMediaExport = false;
+        links.forEach((item) => item.removeAttribute("aria-disabled"));
       }
     });
   });

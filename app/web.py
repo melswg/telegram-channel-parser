@@ -6,6 +6,7 @@ import asyncio
 import mimetypes
 import os
 import re
+import uuid
 from contextlib import asynccontextmanager
 from datetime import datetime, timezone
 from pathlib import Path
@@ -23,6 +24,7 @@ from fastapi.responses import (
 from fastapi.staticfiles import StaticFiles
 from fastapi.templating import Jinja2Templates
 from pydantic import BaseModel, Field
+from starlette.background import BackgroundTask
 
 from .auth import TelegramAuthManager
 from .db import Database
@@ -30,7 +32,7 @@ from .local_settings import LocalSettings, PROJECT_ROOT, validate_save_dir
 from .models import now_iso
 from .parser import execute_parse_run, preview_parse
 from .targets import TelegramTarget, parse_telegram_target
-from .web_exports import render_export, render_export_archive
+from .web_exports import render_export, write_export_archive
 
 
 APP_DIR = Path(__file__).resolve().parent
@@ -42,6 +44,9 @@ templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 auth_manager = TelegramAuthManager()
 parse_lock = asyncio.Lock()
 running_tasks: dict[int, asyncio.Task] = {}
+export_lock = asyncio.Lock()
+prepared_exports: dict[str, tuple[Path, str]] = {}
+EXPORT_DIR = PROJECT_ROOT / ".local" / "exports"
 
 
 def format_post_date(value: str | None) -> str:
@@ -256,6 +261,9 @@ async def _run_queued_parse(
 async def lifespan(_: FastAPI):
     settings = LocalSettings.load_effective()
     Path(settings.session_path).parent.mkdir(parents=True, exist_ok=True)
+    EXPORT_DIR.mkdir(parents=True, exist_ok=True)
+    for path in EXPORT_DIR.glob("*.zip"):
+        path.unlink(missing_ok=True)
     db = open_db()
     db.pause_interrupted_runs()
     db.close()
@@ -268,6 +276,9 @@ async def lifespan(_: FastAPI):
         for task in tasks:
             task.cancel()
         await asyncio.gather(*tasks, return_exceptions=True)
+    for path, _ in prepared_exports.values():
+        path.unlink(missing_ok=True)
+    prepared_exports.clear()
     await auth_manager.shutdown()
 
 
@@ -791,13 +802,10 @@ async def resume_run(run_id: int):
     return enrich_run_estimate(resumed)
 
 
-@app.get("/api/export/{scope}/{identifier}")
-async def export_data(
+def load_export_posts(
     scope: Literal["post", "run", "channel"],
     identifier: str,
-    format: Literal["json", "jsonl", "csv"] = "json",
-    include_media: bool = False,
-):
+) -> tuple[list[dict], str]:
     db = open_db()
     try:
         if scope == "post":
@@ -835,26 +843,117 @@ async def export_data(
 
     if not posts:
         raise HTTPException(status_code=404, detail="Нет данных для экспорта.")
+    return posts, filename
+
+
+async def build_export_file(
+    posts: list[dict],
+    format: str,
+    filename: str,
+) -> tuple[Path, str, int, int]:
     safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", filename)
-    if include_media:
-        settings = LocalSettings.load_effective()
+    token = uuid.uuid4().hex
+    path = EXPORT_DIR / f"{token}.zip"
+    settings = LocalSettings.load_effective()
+    async with export_lock:
         try:
-            content, media_type, _ = render_export_archive(
+            media_type, media_count, size_bytes = await asyncio.to_thread(
+                write_export_archive,
                 posts,
                 format,
                 validate_save_dir(settings.save_dir, create=False),
+                path,
             )
         except ValueError as exc:
             raise api_error(exc, status_code=409) from exc
-        extension = "zip"
-    else:
-        content, media_type = render_export(posts, format)
-        extension = format
+        except OSError as exc:
+            path.unlink(missing_ok=True)
+            raise HTTPException(
+                status_code=507,
+                detail=(
+                    "ZIP не создан. Почему: операционная система не смогла "
+                    f"записать временный файл ({type(exc).__name__}: {exc}). "
+                    "Что сделать: проверьте свободное место и права на папку .local."
+                ),
+            ) from exc
+    return path, f"{safe_name}.zip", media_count, size_bytes
+
+
+@app.post("/api/export/{scope}/{identifier}/prepare")
+async def prepare_media_export(
+    scope: Literal["post", "run", "channel"],
+    identifier: str,
+    format: Literal["json", "jsonl", "csv"] = "json",
+):
+    posts, filename = load_export_posts(scope, identifier)
+    path, download_name, media_count, size_bytes = await build_export_file(
+        posts,
+        format,
+        filename,
+    )
+    token = path.stem
+    prepared_exports[token] = (path, download_name)
+    return {
+        "download_url": f"/api/export-file/{token}",
+        "filename": download_name,
+        "media_files": media_count,
+        "size_bytes": size_bytes,
+    }
+
+
+@app.get("/api/export-file/{token}")
+async def download_prepared_export(token: str):
+    prepared = prepared_exports.pop(token, None)
+    if not prepared:
+        raise HTTPException(
+            status_code=404,
+            detail=(
+                "Подготовленный ZIP не найден или уже был скачан. "
+                "Что сделать: нажмите кнопку экспорта ещё раз."
+            ),
+        )
+    path, filename = prepared
+    if not path.is_file():
+        raise HTTPException(
+            status_code=404,
+            detail="Временный ZIP был удалён. Подготовьте экспорт заново.",
+        )
+    return FileResponse(
+        path,
+        media_type="application/zip",
+        filename=filename,
+        background=BackgroundTask(path.unlink, missing_ok=True),
+    )
+
+
+@app.get("/api/export/{scope}/{identifier}")
+async def export_data(
+    scope: Literal["post", "run", "channel"],
+    identifier: str,
+    format: Literal["json", "jsonl", "csv"] = "json",
+    include_media: bool = False,
+):
+    posts, filename = load_export_posts(scope, identifier)
+    safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", filename)
+    if include_media:
+        path, download_name, _, _ = await build_export_file(
+            posts,
+            format,
+            filename,
+        )
+        return FileResponse(
+            path,
+            media_type="application/zip",
+            filename=download_name,
+            background=BackgroundTask(path.unlink, missing_ok=True),
+        )
+
+    content, media_type = render_export(posts, format)
     return Response(
         content=content,
         media_type=media_type,
         headers={
-            "Content-Disposition": f'attachment; filename="{safe_name}.{extension}"'
+            "Content-Disposition": f'attachment; filename="{safe_name}.{format}"'
         },
     )
 
