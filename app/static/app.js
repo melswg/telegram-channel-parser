@@ -327,6 +327,7 @@ if (telegramLoginForm) {
 const parseForm = $("#parse-form");
 if (parseForm) {
   const urlInput = $("#telegram-url");
+  const urlRow = urlInput.closest(".url-row");
   const confirmOverlay = $("#parse-confirm-overlay");
   const confirmStartButton = $("#parse-confirm-start");
   const confirmCancelButton = $("#parse-confirm-cancel");
@@ -367,6 +368,8 @@ if (parseForm) {
       document.addEventListener("keydown", cancelFromKeyboard);
     });
   }
+
+  urlRow.addEventListener("click", () => urlInput.focus());
 
   urlInput.addEventListener("input", () => {
     const value = urlInput.value.trim().replace(/^https?:\/\//, "");
