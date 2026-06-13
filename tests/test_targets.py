@@ -6,17 +6,17 @@ from app.targets import parse_telegram_target
 class TelegramTargetTests(unittest.TestCase):
     def test_post_variants(self):
         for value in (
-            "https://t.me/deployladeploy/1935",
-            "t.me/deployladeploy/1935",
-            "@deployladeploy/1935",
+            "https://t.me/example_channel/123",
+            "t.me/example_channel/123",
+            "@example_channel/123",
         ):
             target = parse_telegram_target(value)
             self.assertEqual(target.kind, "post")
-            self.assertEqual(target.channel, "deployladeploy")
-            self.assertEqual(target.post_id, 1935)
+            self.assertEqual(target.channel, "example_channel")
+            self.assertEqual(target.post_id, 123)
 
     def test_channel_variants(self):
-        for value in ("https://t.me/deployladeploy", "@deployladeploy"):
+        for value in ("https://t.me/example_channel", "@example_channel"):
             target = parse_telegram_target(value)
             self.assertEqual(target.kind, "channel")
             self.assertIsNone(target.post_id)

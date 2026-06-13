@@ -11,6 +11,12 @@ __pycache__/
 .pytest_cache/
 .mypy_cache/
 .ruff_cache/
+.coverage
+coverage.xml
+htmlcov/
+build/
+dist/
+*.egg-info/
 
 # Runtime data
 *.log
@@ -18,7 +24,8 @@ __pycache__/
 *.sqlite3-wal
 *.sqlite3-shm
 data/parsed/
-data/exports/web/
+data/exports/
+data/media/
 
 # OS/editor
 .DS_Store
