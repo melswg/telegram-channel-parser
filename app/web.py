@@ -345,7 +345,7 @@ class ResetPayload(BaseModel):
 
 class ParsePayload(BaseModel):
     url: str
-    limit: int | None = Field(default=10, ge=1)
+    limit: int | None = Field(default=None, ge=1)
     download_media: bool = False
 
 

@@ -383,7 +383,7 @@ async def _parse_message(
 async def execute_parse_run(
     run_id: int,
     target: TelegramTarget,
-    limit: int | None = 10,
+    limit: int | None = None,
     db_path: str = "db.sqlite3",
     download_media: bool = False,
     resume: bool = False,

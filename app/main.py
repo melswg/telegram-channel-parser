@@ -141,7 +141,7 @@ def sync(
 def _parse_target_cli(
     url: str,
     expected_kind: str,
-    limit: Optional[int] = 10,
+    limit: Optional[int] = None,
     download_media: bool = False,
 ):
     cfg = get_config()
