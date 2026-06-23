@@ -4,6 +4,11 @@ import unittest
 from pathlib import Path
 
 from app.db import Database
+from app.media_selection import (
+    MEDIA_DOWNLOAD_TYPES,
+    normalize_media_selection,
+    should_download_media,
+)
 from app.parser import (
     _collect_messages,
     _prepare_media,
@@ -184,8 +189,36 @@ class ParserMediaTests(unittest.IsolatedAsyncioTestCase):
         self.assertTrue(preview["all_posts"])
         self.assertEqual(
             preview["confirmation"],
-            "Будет загружено 843 публикации. Медиа включены. Вы согласны?",
+            "Будет загружено 843 публикации. Медиа: все типы. Вы согласны?",
         )
+
+    def test_preview_lists_only_selected_media_types(self):
+        preview = build_parse_preview(
+            TelegramTarget(kind="channel", channel="example"),
+            total_posts=12,
+            requested_limit=3,
+            download_media=False,
+            media_types=["voice", "video_note"],
+        )
+
+        self.assertFalse(preview["download_all_media"])
+        self.assertEqual(preview["media_types"], ["video_note", "voice"])
+        self.assertEqual(preview["media_selection"], "Кружки, Голосовые")
+
+    def test_selecting_every_media_type_collapses_to_all(self):
+        download_all, media_types = normalize_media_selection(
+            False,
+            MEDIA_DOWNLOAD_TYPES,
+        )
+
+        self.assertTrue(download_all)
+        self.assertEqual(media_types, ())
+
+    def test_media_filter_matches_only_requested_categories(self):
+        self.assertTrue(should_download_media("voice", False, ["voice"]))
+        self.assertTrue(should_download_media("image", False, ["photo"]))
+        self.assertFalse(should_download_media("video", False, ["voice"]))
+        self.assertTrue(should_download_media("other", True, []))
 
     def test_explicit_limit_is_not_capped_at_200(self):
         preview = build_parse_preview(

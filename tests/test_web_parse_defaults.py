@@ -18,6 +18,17 @@ class WebParseDefaultsTests(unittest.TestCase):
         self.assertIn('placeholder="Все доступные"', template)
         self.assertNotIn('id="parse-limit" name="limit" type="number" min="1" value=', template)
 
+    def test_parser_form_offers_every_media_category(self):
+        template = (
+            Path(__file__).parents[1] / "app" / "templates" / "index.html"
+        ).read_text(encoding="utf-8")
+
+        for media_type in (
+            "photo", "video", "video_note", "animation", "document",
+            "audio", "voice", "sticker",
+        ):
+            self.assertIn(f'value="{media_type}"', template)
+
 
 if __name__ == "__main__":
     unittest.main()

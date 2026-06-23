@@ -76,6 +76,20 @@ class WebDatabaseTests(unittest.TestCase):
             83,
         )
 
+    def test_parse_run_persists_selected_media_types(self):
+        run_id = self.db.create_parse_run(
+            "https://t.me/example",
+            "channel",
+            "example",
+            5,
+            download_media=False,
+            media_types=["voice", "photo"],
+        )
+
+        run = self.db.get_parse_run(run_id)
+        self.assertEqual(run["download_media"], 0)
+        self.assertEqual(run["media_types"], ["voice", "photo"])
+
     def test_interrupted_run_is_paused_and_keeps_processed_ids(self):
         run_id = self.db.create_parse_run(
             "https://t.me/example",

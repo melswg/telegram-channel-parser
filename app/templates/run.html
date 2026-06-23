@@ -37,8 +37,8 @@
     <div><strong id="run-media">{{ run.media_files_count or 0 }}</strong><span>media-файлов</span></div>
     <div><strong>{{ run.target_type }}</strong><span>тип цели</span></div>
   </div>
-  {% if run.download_media %}
-  <p class="media-ready-note">Media загружаются в папку <code>media</code> каждого поста. Не все Telegram media обязательно содержат скачиваемый файл.</p>
+  {% if run.download_media or run.media_types %}
+  <p class="media-ready-note">Медиа: {{ run.media_selection }}. Файлы загружаются в папку <code>media</code> каждого поста. Не все Telegram media обязательно содержат скачиваемый файл.</p>
   {% endif %}
   <p id="run-error" class="error-text">{{ run.error }}</p>
 </article>

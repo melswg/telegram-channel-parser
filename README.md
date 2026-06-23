@@ -26,7 +26,8 @@ There is no shared backend and no project-owner Telegram account involved.
 
 - Parse a single Telegram post or an entire channel.
 - Collect comments, authors, dates, and reply relationships.
-- Download photos, videos, voice messages, audio, and documents.
+- Download all media or select only photos, videos, video notes, GIFs, files,
+  audio, voice messages, or stickers.
 - Preview downloaded media directly in the browser.
 - Pause and resume long channel imports.
 - See progress and an estimated completion time.
@@ -99,7 +100,8 @@ On the first launch, the app will guide you through Telegram authorization:
 2. Sign in with your phone number and Telegram code, or use QR login.
 3. Paste a link to a post or channel.
 4. Choose a post limit or leave it empty to parse the full channel.
-5. Enable media downloads if needed, then start the import.
+5. Download all media or choose only the media types you need, then start the
+   import.
 
 Supported link formats include:
 

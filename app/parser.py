@@ -13,6 +13,12 @@ from telethon import errors
 from .config import Config
 from .db import Database
 from .local_settings import LocalSettings, validate_save_dir
+from .media_selection import (
+    MediaDownloadType,
+    media_selection_label,
+    normalize_media_selection,
+    should_download_media,
+)
 from .models import now_iso
 from .targets import TelegramTarget
 from .telegram import TelegramBackend
@@ -37,13 +43,18 @@ def build_parse_preview(
     total_posts: int,
     requested_limit: int | None,
     download_media: bool,
+    media_types: list[str] | tuple[str, ...] = (),
 ) -> dict[str, Any]:
+    download_all, selected_media_types = normalize_media_selection(
+        download_media,
+        media_types,
+    )
     selected_posts = (
         1
         if target.kind == "post"
         else total_posts if requested_limit is None else min(total_posts, requested_limit)
     )
-    media_state = "включены" if download_media else "выключены"
+    media_label = media_selection_label(download_all, selected_media_types)
     if selected_posts % 10 == 1 and selected_posts % 100 != 11:
         noun = "публикация"
     elif selected_posts % 10 in {2, 3, 4} and selected_posts % 100 not in {12, 13, 14}:
@@ -54,10 +65,13 @@ def build_parse_preview(
         "available_posts": total_posts,
         "posts_count": selected_posts,
         "all_posts": target.kind == "channel" and requested_limit is None,
-        "download_media": download_media,
+        "download_media": download_all or bool(selected_media_types),
+        "download_all_media": download_all,
+        "media_types": list(selected_media_types),
+        "media_selection": media_label,
         "confirmation": (
             f"Будет загружено {selected_posts} {noun}. "
-            f"Медиа {media_state}. Вы согласны?"
+            f"Медиа: {media_label.lower()}. Вы согласны?"
         ),
     }
 
@@ -66,6 +80,7 @@ async def preview_parse(
     target: TelegramTarget,
     limit: int | None,
     download_media: bool,
+    media_types: list[str] | tuple[str, ...] = (),
 ) -> dict[str, Any]:
     """Count available posts before the user confirms a parse run."""
     settings = LocalSettings.load_effective()
@@ -94,6 +109,7 @@ async def preview_parse(
             total_posts,
             limit,
             download_media,
+            media_types,
         )
     except Exception as exc:
         if isinstance(exc, ValueError):
@@ -191,6 +207,7 @@ async def _prepare_media(
     stem: str,
     media_type: str | None,
     should_download: bool,
+    skip_reason: str | None = None,
 ) -> tuple[dict[str, Any], str | None]:
     info: dict[str, Any] = {
         "type": media_type or "other",
@@ -208,7 +225,9 @@ async def _prepare_media(
         })
         return info, None
     if not should_download:
-        info["reason"] = "Скачивание media не было выбрано при парсинге."
+        info["reason"] = skip_reason or (
+            "Скачивание media не было выбрано при парсинге."
+        )
         return info, None
 
     media_dir.mkdir(parents=True, exist_ok=True)
@@ -286,7 +305,8 @@ async def _parse_message(
     run_id: int,
     save_dir: Path,
     target: TelegramTarget,
-    download_media: bool,
+    download_all_media: bool,
+    media_types: tuple[MediaDownloadType, ...],
     publication_number: int | None,
 ) -> tuple[dict, Path, list[str], int]:
     if not await _wait_until_resumed(db, run_id):
@@ -298,12 +318,27 @@ async def _parse_message(
     media_dir = post_dir / "media"
     media_warnings: list[str] = []
     media_files_count = 0
+    media_download_requested = download_all_media or bool(media_types)
     post_media = None
     if has_media:
         if not await _wait_until_resumed(db, run_id):
             raise asyncio.CancelledError
+        should_download = should_download_media(
+            media_type,
+            download_all_media,
+            media_types,
+        )
         post_media, warning = await _prepare_media(
-            tg, msg, media_dir, f"post_{msg.id}", media_type, download_media
+            tg,
+            msg,
+            media_dir,
+            f"post_{msg.id}",
+            media_type,
+            should_download,
+            (
+                "Этот тип media не выбран для скачивания."
+                if media_download_requested and not should_download else None
+            ),
         )
         if post_media.get("downloaded"):
             media_files_count += 1
@@ -325,13 +360,22 @@ async def _parse_message(
         if comment_has_media:
             if not await _wait_until_resumed(db, run_id):
                 raise asyncio.CancelledError
+            should_download = should_download_media(
+                comment_media_type,
+                download_all_media,
+                media_types,
+            )
             comment_media, warning = await _prepare_media(
                 tg,
                 comment_msg,
                 media_dir,
                 f"comment_{comment_msg.id}",
                 comment_media_type,
-                download_media,
+                should_download,
+                (
+                    "Этот тип media не выбран для скачивания."
+                    if media_download_requested and not should_download else None
+                ),
             )
             if comment_media.get("downloaded"):
                 media_files_count += 1
@@ -369,7 +413,9 @@ async def _parse_message(
         "media_type": media_type,
         "media": post_media,
         "media_directory": "media" if media_files_count else None,
-        "media_download_requested": download_media,
+        "media_download_requested": media_download_requested,
+        "media_download_all": download_all_media,
+        "media_download_types": list(media_types),
         "comments_count": len(comments),
         "comments": comments,
     }
@@ -386,6 +432,7 @@ async def execute_parse_run(
     limit: int | None = None,
     db_path: str = "db.sqlite3",
     download_media: bool = False,
+    media_types: list[str] | tuple[str, ...] = (),
     resume: bool = False,
 ) -> dict:
     """Execute one parse run and persist all status updates."""
@@ -412,6 +459,10 @@ async def execute_parse_run(
     warnings: list[str] = list(existing_run.get("warnings") or [])
     save_path = str(existing_run.get("save_path") or "")
     media_files_count = int(existing_run.get("media_files_count") or 0)
+    download_all_media, selected_media_types = normalize_media_selection(
+        download_media,
+        media_types,
+    )
 
     if db.get_parse_run_status(run_id) != "paused":
         db.update_parse_run(run_id, status="running", error="")
@@ -498,7 +549,8 @@ async def execute_parse_run(
             try:
                 parsed, post_path, media_warnings, post_media_count = await _parse_message(
                     tg, db, entity, channel_model, channel_db_id,
-                    msg, run_id, save_dir, target, download_media,
+                    msg, run_id, save_dir, target, download_all_media,
+                    selected_media_types,
                     publication_numbers.get(msg.id),
                 )
                 posts_count += 1
@@ -545,6 +597,8 @@ async def execute_parse_run(
                 "posts_count": posts_count,
                 "comments_count": comments_count,
                 "media_files_count": media_files_count,
+                "media_download_all": download_all_media,
+                "media_download_types": list(selected_media_types),
                 "media_directory": (
                     "В каждом каталоге поста: media/" if media_files_count else None
                 ),

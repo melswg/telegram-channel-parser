@@ -29,6 +29,11 @@ from starlette.background import BackgroundTask
 from .auth import TelegramAuthManager
 from .db import Database
 from .local_settings import LocalSettings, PROJECT_ROOT, validate_save_dir
+from .media_selection import (
+    MediaDownloadType,
+    media_selection_label,
+    normalize_media_selection,
+)
 from .models import now_iso
 from .parser import execute_parse_run, preview_parse
 from .targets import TelegramTarget, parse_telegram_target
@@ -160,6 +165,10 @@ def format_wait_time(seconds: int | None) -> str:
 
 
 def enrich_run_estimate(run: dict) -> dict:
+    run["media_selection"] = media_selection_label(
+        bool(run.get("download_media")),
+        run.get("media_types") or (),
+    )
     run["processed_posts"] = max(
         int(run.get("processed_posts") or 0),
         int(run.get("posts_count") or 0),
@@ -244,6 +253,7 @@ async def _run_queued_parse(
     target: TelegramTarget,
     limit: int | None,
     download_media: bool,
+    media_types: list[str] | tuple[str, ...] = (),
     resume: bool = False,
 ) -> None:
     async with parse_lock:
@@ -253,6 +263,7 @@ async def _run_queued_parse(
             limit=limit,
             db_path=DB_PATH,
             download_media=download_media,
+            media_types=media_types,
             resume=resume,
         )
 
@@ -347,6 +358,7 @@ class ParsePayload(BaseModel):
     url: str
     limit: int | None = Field(default=None, ge=1)
     download_media: bool = False
+    media_types: list[MediaDownloadType] = Field(default_factory=list)
 
 
 @app.get("/", response_class=HTMLResponse)
@@ -646,18 +658,29 @@ async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None)
             detail=f"Этот endpoint принимает только цель типа {required_kind}.",
         )
     limit = 1 if target.kind == "post" else payload.limit
+    download_all_media, selected_media_types = normalize_media_selection(
+        payload.download_media,
+        payload.media_types,
+    )
 
     db = open_db()
     try:
         run_id = db.create_parse_run(
             target.canonical_url, target.kind, target.channel,
             total_posts=(limit or 0) if target.kind == "channel" else 1,
-            download_media=payload.download_media,
+            download_media=download_all_media,
+            media_types=selected_media_types,
         )
     finally:
         db.close()
     task = asyncio.create_task(
-        _run_queued_parse(run_id, target, limit, payload.download_media)
+        _run_queued_parse(
+            run_id,
+            target,
+            limit,
+            download_all_media,
+            selected_media_types,
+        )
     )
     _track_task(run_id, task)
     return {
@@ -665,7 +688,9 @@ async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None)
         "status": "queued",
         "target_type": target.kind,
         "url": target.canonical_url,
-        "download_media": payload.download_media,
+        "download_media": download_all_media or bool(selected_media_types),
+        "download_all_media": download_all_media,
+        "media_types": list(selected_media_types),
         "detail_url": f"/runs/{run_id}",
     }
 
@@ -675,7 +700,12 @@ async def preview_parse_target(payload: ParsePayload):
     try:
         target = parse_telegram_target(payload.url)
         limit = 1 if target.kind == "post" else payload.limit
-        return await preview_parse(target, limit, payload.download_media)
+        return await preview_parse(
+            target,
+            limit,
+            payload.download_media,
+            payload.media_types,
+        )
     except ValueError as exc:
         raise api_error(exc) from exc
 
@@ -795,6 +825,7 @@ async def resume_run(run_id: int):
                 target,
                 limit,
                 bool(run["download_media"]),
+                run.get("media_types") or (),
                 resume=True,
             )
         )

@@ -331,6 +331,39 @@ if (parseForm) {
   const confirmOverlay = $("#parse-confirm-overlay");
   const confirmStartButton = $("#parse-confirm-start");
   const confirmCancelButton = $("#parse-confirm-cancel");
+  const allMediaToggle = $("#download-media");
+  const mediaTypeOptions = $("#media-type-options");
+  const mediaTypeToggles = $$('[data-media-type]', mediaTypeOptions);
+  const mediaSelectionNote = $("#media-selection-note");
+
+  function updateMediaSelection() {
+    if (!allMediaToggle.checked && mediaTypeToggles.every((item) => item.checked)) {
+      allMediaToggle.checked = true;
+    }
+    if (allMediaToggle.checked) {
+      mediaTypeToggles.forEach((item) => {
+        item.checked = false;
+        item.disabled = true;
+      });
+      mediaTypeOptions.classList.add("locked");
+      mediaSelectionNote.textContent = "Будут скачаны все типы медиа.";
+      return;
+    }
+    mediaTypeOptions.classList.remove("locked");
+    mediaTypeToggles.forEach((item) => { item.disabled = false; });
+    const selectedLabels = mediaTypeToggles
+      .filter((item) => item.checked)
+      .map((item) => item.dataset.label);
+    mediaSelectionNote.textContent = selectedLabels.length
+      ? `Выбрано: ${selectedLabels.join(", ")}.`
+      : "Медиа скачиваться не будут.";
+  }
+
+  allMediaToggle.addEventListener("change", updateMediaSelection);
+  mediaTypeToggles.forEach((item) => {
+    item.addEventListener("change", updateMediaSelection);
+  });
+  updateMediaSelection();
 
   function requestParseConfirmation(preview) {
     $("#parse-confirm-message").textContent = preview.confirmation;
@@ -338,9 +371,7 @@ if (parseForm) {
     $("#parse-confirm-scope").textContent = preview.all_posts
       ? "Весь канал"
       : "Последние";
-    $("#parse-confirm-media").textContent = preview.download_media
-      ? "Включены"
-      : "Выключены";
+    $("#parse-confirm-media").textContent = preview.media_selection;
     confirmOverlay.hidden = false;
     confirmStartButton.focus();
 
@@ -391,7 +422,10 @@ if (parseForm) {
       const payload = {
         url: urlInput.value,
         limit: rawLimit ? Number(rawLimit) : null,
-        download_media: $("#download-media").checked,
+        download_media: allMediaToggle.checked,
+        media_types: mediaTypeToggles
+          .filter((item) => item.checked)
+          .map((item) => item.value),
       };
       const preview = await api("/api/parse/preview", {
         method: "POST",

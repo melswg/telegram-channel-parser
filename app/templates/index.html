@@ -35,14 +35,28 @@
           <input id="parse-limit" name="limit" type="number" min="1" placeholder="Все доступные">
           <small>Заполняется, если планируется парсинг канала</small>
         </div>
-        <div class="parse-toggles">
-          <label class="check-control">
-            <input id="download-media" type="checkbox">
-            <span>Скачивать media</span>
-          </label>
+        <div class="media-picker">
+          <div class="media-picker-head">
+            <span>Медиа для скачивания</span>
+            <label class="check-control media-all-control">
+              <input id="download-media" type="checkbox">
+              <span>Скачивать все медиа</span>
+            </label>
+          </div>
+          <div id="media-type-options" class="media-type-grid">
+            <label class="media-type-option"><input type="checkbox" data-media-type value="photo" data-label="Фото"><span>Фото</span></label>
+            <label class="media-type-option"><input type="checkbox" data-media-type value="video" data-label="Видео"><span>Видео</span></label>
+            <label class="media-type-option"><input type="checkbox" data-media-type value="video_note" data-label="Кружки"><span>Кружки</span></label>
+            <label class="media-type-option"><input type="checkbox" data-media-type value="animation" data-label="GIF"><span>GIF</span></label>
+            <label class="media-type-option"><input type="checkbox" data-media-type value="document" data-label="Файлы"><span>Файлы</span></label>
+            <label class="media-type-option"><input type="checkbox" data-media-type value="audio" data-label="Аудиофайлы"><span>Аудиофайлы</span></label>
+            <label class="media-type-option"><input type="checkbox" data-media-type value="voice" data-label="Голосовые"><span>Голосовые</span></label>
+            <label class="media-type-option"><input type="checkbox" data-media-type value="sticker" data-label="Стикеры"><span>Стикеры</span></label>
+          </div>
+          <small id="media-selection-note">Медиа скачиваться не будут.</small>
         </div>
       </div>
-      <p class="media-hint">При включении фото, видео, голосовые и документы сохранятся в папке <code>media</code> рядом с JSON. Это увеличит время и объём загрузки.</p>
+      <p class="media-hint">Выбранные файлы сохранятся в папке <code>media</code> рядом с JSON. Чем больше типов выбрано, тем дольше загрузка и больше итоговый объём.</p>
       <button class="primary-button" type="submit">
         <span>Спарсить</span><b>→</b>
       </button>

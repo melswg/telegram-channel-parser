@@ -94,6 +94,7 @@ CREATE TABLE IF NOT EXISTS parse_runs (
     processed_posts INTEGER DEFAULT 0,
     total_posts     INTEGER DEFAULT 0,
     download_media  INTEGER DEFAULT 0,
+    media_types_json TEXT DEFAULT '[]',
     media_files_count INTEGER DEFAULT 0,
     warnings_json   TEXT DEFAULT '[]'
 );
@@ -175,6 +176,9 @@ class Database:
         self.conn.executescript(SCHEMA_SQL)
         self._ensure_column("parse_runs", "download_media", "INTEGER DEFAULT 0")
         self._ensure_column(
+            "parse_runs", "media_types_json", "TEXT DEFAULT '[]'"
+        )
+        self._ensure_column(
             "parse_runs", "media_files_count", "INTEGER DEFAULT 0"
         )
         self._ensure_column(
@@ -196,15 +200,16 @@ class Database:
 
     def create_parse_run(self, source_url: str, target_type: str, channel: str,
                          total_posts: int = 0,
-                         download_media: bool = False) -> int:
+                         download_media: bool = False,
+                         media_types: list[str] | tuple[str, ...] = ()) -> int:
         cur = self.conn.execute("""
             INSERT INTO parse_runs (
                 source_url, target_type, channel, status, started_at,
-                total_posts, download_media
-            ) VALUES (?, ?, ?, 'queued', ?, ?, ?)
+                total_posts, download_media, media_types_json
+            ) VALUES (?, ?, ?, 'queued', ?, ?, ?, ?)
         """, (
             source_url, target_type, channel, now_iso(), total_posts,
-            int(download_media),
+            int(download_media), json.dumps(list(media_types)),
         ))
         self.conn.commit()
         return int(cur.lastrowid)
@@ -287,6 +292,9 @@ class Database:
             return None
         result = dict(row)
         result["warnings"] = json.loads(result.pop("warnings_json") or "[]")
+        result["media_types"] = json.loads(
+            result.pop("media_types_json", "[]") or "[]"
+        )
         result["posts"] = []
         for item in self.conn.execute("""
                 SELECT rp.channel, rp.post_id, rp.error, p.date, p.text,
@@ -314,7 +322,14 @@ class Database:
         rows = self.conn.execute("""
             SELECT * FROM parse_runs ORDER BY id DESC LIMIT ?
         """, (limit,)).fetchall()
-        return [dict(row) for row in rows]
+        results = []
+        for row in rows:
+            result = dict(row)
+            result["media_types"] = json.loads(
+                result.pop("media_types_json", "[]") or "[]"
+            )
+            results.append(result)
+        return results
 
     def upsert_parsed_post(self, data: dict, run_id: int) -> None:
         self.conn.execute("""
@@ -398,7 +413,14 @@ class Database:
             raw_post = json.loads(result.get("raw_json") or "{}")
         except (TypeError, ValueError):
             raw_post = {}
-        for key in ("media", "media_directory", "media_download_requested", "url"):
+        for key in (
+            "media",
+            "media_directory",
+            "media_download_requested",
+            "media_download_all",
+            "media_download_types",
+            "url",
+        ):
             if key in raw_post:
                 result[key] = raw_post[key]
         result["comments"] = [
