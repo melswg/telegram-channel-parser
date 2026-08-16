@@ -33,6 +33,7 @@ FORBIDDEN_STORAGE_ROOTS = tuple(
         "/var",
     )
 )
+FILESYSTEM_ROOT = Path("/").resolve()
 
 
 def mask_secret(value: str) -> str:
@@ -68,7 +69,7 @@ def validate_save_dir(value: str, create: bool = True) -> Path:
     path = path.resolve()
 
     for root in FORBIDDEN_STORAGE_ROOTS:
-        if path == root or (root != Path("/") and root in path.parents):
+        if path == root or (root != FILESYSTEM_ROOT and root in path.parents):
             raise ValueError(f"Нельзя сохранять результаты в системную директорию: {path}")
 
     if create:

@@ -28,6 +28,14 @@ from starlette.background import BackgroundTask
 
 from .auth import TelegramAuthManager
 from .db import Database
+from .demo import (
+    DEMO_DB_PATH,
+    DEMO_MODE,
+    DEMO_SAVE_DIR,
+    demo_private_settings,
+    demo_status,
+    seed_demo_data,
+)
 from .local_settings import LocalSettings, PROJECT_ROOT, validate_save_dir
 from .media_selection import (
     MediaDownloadType,
@@ -43,7 +51,7 @@ from .web_exports import render_export, write_export_archive
 APP_DIR = Path(__file__).resolve().parent
 DB_PATH = os.getenv(
     "TELEGRAM_IMPORTER_DB_PATH",
-    str(PROJECT_ROOT / "db.sqlite3"),
+    str(DEMO_DB_PATH if DEMO_MODE else PROJECT_ROOT / "db.sqlite3"),
 )
 templates = Jinja2Templates(directory=str(APP_DIR / "templates"))
 auth_manager = TelegramAuthManager()
@@ -224,6 +232,7 @@ def template_context(request: Request, **values) -> dict:
     return {
         "request": request,
         "current_year": 2026,
+        "demo_mode": DEMO_MODE,
         **values,
     }
 
@@ -276,7 +285,10 @@ async def lifespan(_: FastAPI):
     for path in EXPORT_DIR.glob("*.zip"):
         path.unlink(missing_ok=True)
     db = open_db()
-    db.pause_interrupted_runs()
+    if DEMO_MODE:
+        seed_demo_data(db)
+    else:
+        db.pause_interrupted_runs()
     db.close()
     yield
     if running_tasks:
@@ -378,7 +390,8 @@ async def dashboard(request: Request):
             runs=runs,
             posts=posts,
             onboarding_required=(
-                not settings.configured or not settings.session_file.exists()
+                False if DEMO_MODE else
+                (not settings.configured or not settings.session_file.exists())
             ),
             onboarding_step="telegram" if settings.configured else "credentials",
         ),
@@ -410,19 +423,23 @@ async def download_setup_guide():
 
 @app.get("/settings", response_class=HTMLResponse)
 async def settings_page(request: Request):
+    settings = demo_status() if DEMO_MODE else LocalSettings.load_effective().public_dict()
     return templates.TemplateResponse(
         request=request,
         name="settings.html",
-        context=template_context(request, settings=LocalSettings.load_effective().public_dict()),
+        context=template_context(request, settings=settings),
     )
 
 
 @app.get("/media/{channel}/{post_id}/{filename}", name="serve_media")
 async def serve_media(channel: str, post_id: int, filename: str):
-    settings = LocalSettings.load_effective()
     try:
+        save_dir = (
+            DEMO_SAVE_DIR if DEMO_MODE else
+            validate_save_dir(LocalSettings.load_effective().save_dir, create=False)
+        )
         path = resolve_media_path(
-            validate_save_dir(settings.save_dir, create=False),
+            save_dir,
             channel,
             post_id,
             filename,
@@ -496,6 +513,8 @@ async def health():
 
 @app.get("/api/status")
 async def api_status():
+    if DEMO_MODE:
+        return demo_status()
     return await auth_manager.status()
 
 
@@ -588,6 +607,11 @@ async def complete_login(payload: CompleteLoginPayload):
 
 @app.post("/api/settings/storage")
 async def save_storage(payload: StoragePayload):
+    if DEMO_MODE:
+        raise HTTPException(
+            status_code=409,
+            detail="Путь не изменён: настройки заблокированы в демо-режиме.",
+        )
     settings = LocalSettings.load()
     try:
         settings.update_save_dir(payload.save_dir)
@@ -598,8 +622,11 @@ async def save_storage(payload: StoragePayload):
 
 @app.post("/api/settings/private")
 async def private_settings():
-    settings = LocalSettings.load_effective()
-    response = JSONResponse(settings.private_dict())
+    settings = (
+        demo_private_settings()
+        if DEMO_MODE else LocalSettings.load_effective().private_dict()
+    )
+    response = JSONResponse(settings)
     response.headers["Cache-Control"] = "no-store"
     response.headers["Pragma"] = "no-cache"
     return response
@@ -607,6 +634,11 @@ async def private_settings():
 
 @app.post("/api/setup/reset")
 async def reset_session(payload: ResetPayload):
+    if DEMO_MODE:
+        raise HTTPException(
+            status_code=409,
+            detail="В демо-режиме нет настоящей Telegram session для удаления.",
+        )
     if not payload.confirm:
         raise HTTPException(
             status_code=400,
@@ -631,6 +663,14 @@ async def reset_session(payload: ResetPayload):
 
 
 async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None):
+    if DEMO_MODE:
+        raise HTTPException(
+            status_code=409,
+            detail=(
+                "Демо-режим показывает готовые тестовые данные. "
+                "Для настоящего импорта запустите обычный Start.bat."
+            ),
+        )
     settings = LocalSettings.load_effective()
     if not settings.configured:
         raise HTTPException(
@@ -697,6 +737,11 @@ async def enqueue_parse(payload: ParsePayload, required_kind: str | None = None)
 
 @app.post("/api/parse/preview")
 async def preview_parse_target(payload: ParsePayload):
+    if DEMO_MODE:
+        raise HTTPException(
+            status_code=409,
+            detail="Предпросмотр Telegram отключён в демо-режиме.",
+        )
     try:
         target = parse_telegram_target(payload.url)
         limit = 1 if target.kind == "post" else payload.limit
