@@ -61,6 +61,11 @@ nav a:hover, .text-link:hover { color: white; }
   padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px;
   color: #adb1ba; background: rgba(255,255,255,.035); font-size: 11px; font-weight: 650;
 }
+.demo-pill {
+  display: inline-flex; align-items: center; width: max-content;
+  padding: 5px 9px; border: 1px solid rgba(242,198,109,.28); border-radius: 999px;
+  color: #f2c66d; background: rgba(242,198,109,.08); font-size: 10px; font-weight: 800; letter-spacing: .08em;
+}
 .local-pill i { width: 6px; height: 6px; background: var(--green); border-radius: 50%; box-shadow: 0 0 10px var(--green); }
 .shell { width: min(1180px, calc(100% - 40px)); margin: auto; padding: 75px 0 100px; }
 .hero { display: flex; align-items: end; justify-content: space-between; gap: 55px; margin-bottom: 50px; }
