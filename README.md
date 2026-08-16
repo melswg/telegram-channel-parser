@@ -92,6 +92,19 @@ A step-by-step guide for obtaining Telegram API credentials is available in
 
 5. Open [http://127.0.0.1:8000](http://127.0.0.1:8000).
 
+### Demo mode for frontend development
+
+To work on the frontend without an `api_id`, `api_hash`, or Telegram connection,
+run `Start Demo.bat` on Windows. On macOS or Linux use:
+
+```bash
+TELEGRAM_IMPORTER_DEMO=1 python -m app.web
+```
+
+Demo mode creates a separate `.local/demo.sqlite3` database with sample runs,
+posts, comments, and images. It does not modify the real database or Telegram
+session. A `DEMO DATA` badge in the top navigation indicates the active mode.
+
 ## Usage
 
 On the first launch, the app will guide you through Telegram authorization:
