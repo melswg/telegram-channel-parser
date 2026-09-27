@@ -3,29 +3,29 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="color-scheme" content="dark">
+  <meta name="color-scheme" content="light">
   <title>{% block title %}Telegram Comments Importer{% endblock %}</title>
-  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v=20260623-1">
-  <script defer src="{{ url_for('static', path='/app.js') }}?v=20260623-1"></script>
+  <link rel="stylesheet" href="{{ url_for('static', path='/app.css') }}?v=20260927-4">
+  <script defer src="{{ url_for('static', path='/app.js') }}?v=20260927-2"></script>
+  <script defer src="{{ url_for('static', path='/footer-wave.js') }}?v=20260926-4"></script>
+  <script defer src="{{ url_for('static', path='/ui-copy.js') }}?v=20260927-1"></script>
 </head>
 <body>
-  <div class="ambient ambient-one"></div>
-  <div class="ambient ambient-two"></div>
+  <a class="skip-link" href="#main">К содержимому</a>
   <header class="topbar">
     <a class="brand" href="/overview">
-      <span class="brand-mark">T</span>
-      <span><strong>Telegram Importer</strong><small>local read-only workspace</small></span>
+      <span>parser</span>
     </a>
-    <nav>
-      <a href="/overview">Обзор</a>
-      <a href="/">Парсинг</a>
-      <a href="/settings">Настройки</a>
-      {% if demo_mode %}<span class="demo-pill">DEMO DATA</span>{% endif %}
-      <span class="local-pill"><i></i> 127.0.0.1</span>
+    <nav aria-label="Основная навигация">
+      <a href="/overview" {% if request.url.path == '/overview' %}aria-current="page"{% endif %}>(обзор)</a>
+      <a href="/" {% if request.url.path != '/overview' and request.url.path != '/settings' %}aria-current="page"{% endif %}>(парсинг)</a>
+      <a href="/settings" {% if request.url.path == '/settings' %}aria-current="page"{% endif %}>(настройки)</a>
     </nav>
   </header>
-  <main class="shell">{% block content %}{% endblock %}</main>
-  <footer>Данные, credentials и Telegram session остаются на этом компьютере.</footer>
+  <main class="shell" id="main">{% block content %}{% endblock %}</main>
+  <footer class="site-footer">
+    <canvas class="footer-wave" aria-hidden="true" width="1600" height="190"></canvas>
+  </footer>
   <div id="toast" class="toast" role="status"></div>
 </body>
 </html>

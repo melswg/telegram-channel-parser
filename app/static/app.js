@@ -1,6 +1,79 @@
 const $ = (selector, root = document) => root.querySelector(selector);
 const $$ = (selector, root = document) => [...root.querySelectorAll(selector)];
 
+// Use the site's own validation messages instead of browser tooltips.
+$$("form:not([method=dialog])").forEach((form, formIndex) => {
+  form.noValidate = true;
+  const clearFieldError = (field) => {
+    const errorId = field.dataset.errorId;
+    if (!errorId) return;
+    document.getElementById(errorId)?.remove();
+    const description = (field.getAttribute("aria-describedby") || "")
+      .split(" ").filter((id) => id && id !== errorId).join(" ");
+    if (description) field.setAttribute("aria-describedby", description);
+    else field.removeAttribute("aria-describedby");
+    field.removeAttribute("aria-invalid");
+    delete field.dataset.errorId;
+  };
+  $$("input", form).forEach((field) => field.addEventListener("input", () => clearFieldError(field)));
+  form.addEventListener("submit", (event) => {
+    const invalid = $$("input", form).find((field) => field.willValidate && !field.validity.valid);
+    if (!invalid) return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    clearFieldError(invalid);
+    const error = document.createElement("span");
+    error.id = "field-error-" + formIndex + "-" + $$("input", form).indexOf(invalid);
+    error.className = "field-error";
+    error.setAttribute("role", "alert");
+    const validity = invalid.validity;
+    error.textContent = validity.valueMissing ? "Заполните это поле."
+      : validity.rangeUnderflow ? "Минимальное значение: " + invalid.min + "."
+      : validity.rangeOverflow ? "Максимальное значение: " + invalid.max + "."
+      : validity.badInput || validity.stepMismatch ? "Введите корректное число."
+      : "Проверьте значение в этом поле.";
+    invalid.insertAdjacentElement("afterend", error);
+    invalid.dataset.errorId = error.id;
+    invalid.setAttribute("aria-invalid", "true");
+    invalid.setAttribute("aria-describedby", [invalid.getAttribute("aria-describedby"), error.id].filter(Boolean).join(" "));
+    invalid.focus();
+  }, true);
+});
+
+document.addEventListener("keydown", (event) => {
+  if (event.key === "Tab") document.body.classList.add("keyboard-navigation");
+});
+document.addEventListener("pointerdown", () => document.body.classList.remove("keyboard-navigation"));
+
+$$('.media-audio-toggle').forEach((button) => {
+  const viewer = button.closest('.media-viewer');
+  const audio = $('.media-audio-element', viewer);
+  const track = $('.media-audio-track', viewer);
+  if (!audio || !track) return;
+  const updateProgress = () => {
+    const progress = audio.duration ? (audio.currentTime / audio.duration) * 100 : 0;
+    track.style.setProperty('--media-progress', `${progress}%`);
+  };
+  button.addEventListener('click', async () => {
+    if (audio.paused) {
+      try {
+        await audio.play();
+        button.textContent = '( пауза )';
+      } catch {
+        button.textContent = '( недоступно )';
+      }
+    } else {
+      audio.pause();
+      button.textContent = '( слушать )';
+    }
+  });
+  audio.addEventListener('timeupdate', updateProgress);
+  audio.addEventListener('ended', () => {
+    button.textContent = '( слушать )';
+    updateProgress();
+  });
+});
+
 async function api(path, options = {}) {
   let response;
   try {
@@ -61,6 +134,12 @@ function showOnboardingStep(step) {
       order[item.dataset.progressStep] <= order[step],
     );
   });
+  const panel = $('[data-onboarding-panel]:not([hidden])', overlay);
+  const heading = $("h2", panel);
+  if (!heading.id) heading.id = "onboarding-title-" + step;
+  $(".onboarding-dialog", overlay).setAttribute("aria-labelledby", heading.id);
+  $("#onboarding-progress-label").textContent = "parser / подключение / " + ({credentials:"01 из 02",telegram:"02 из 02",success:"готово"}[step]);
+  $("input:not([type=hidden]):not(:disabled), a, button", panel)?.focus();
 }
 
 function closeOnboarding() {
@@ -71,57 +150,19 @@ function closeOnboarding() {
 }
 
 async function loadStatus() {
-  const card = $("#auth-card");
-  if (!card) return null;
+  if (!$("#onboarding-overlay")) return null;
   try {
     const status = await api("/api/status");
     if ($("#storage-path")) $("#storage-path").textContent = status.save_dir;
-    if (card) {
-      card.classList.remove("skeleton", "authorized", "warning");
-      const title = $("strong", card);
-      const reason = $("#auth-reason", card);
-      const action = $("#open-onboarding");
-      if (status.authenticated) {
-        card.classList.add("authorized");
-        const user = status.user || {};
-        title.textContent = user.username
-          ? `@${user.username}`
-          : (user.phone || `ID ${user.id}`);
-        action.textContent = "Настройки";
-        action.dataset.action = "settings";
-        if (reason) reason.textContent = "Локальная session активна.";
-        closeOnboarding();
-      } else {
-        card.classList.add("warning");
-        title.textContent = status.configured
-          ? "Нужно войти в Telegram"
-          : "Нужны api_id и api_hash";
-        action.textContent = "Настроить";
-        action.dataset.action = "onboarding";
-        if (reason) reason.textContent = status.reason || "";
-        showOnboardingStep(status.configured ? "telegram" : "credentials");
-      }
+    if (status.authenticated) {
+      closeOnboarding();
+    } else {
+      showOnboardingStep(status.configured ? "telegram" : "credentials");
     }
     return status;
   } catch (error) {
-    if (card) {
-      $("strong", card).textContent = "Не удалось проверить session";
-      const reason = $("#auth-reason", card);
-      if (reason) reason.textContent = error.message;
-    }
+    message($("#parse-form"), error.message, true);
   }
-}
-
-const openOnboardingButton = $("#open-onboarding");
-if (openOnboardingButton) {
-  openOnboardingButton.addEventListener("click", () => {
-    if (openOnboardingButton.dataset.action === "settings") {
-      location.href = "/settings";
-      return;
-    }
-    const overlay = $("#onboarding-overlay");
-    showOnboardingStep(overlay?.dataset.initialStep || "credentials");
-  });
 }
 
 const credentialsForm = $("#credentials-form");
@@ -165,10 +206,15 @@ if (telegramLoginForm) {
   const qrMessage = $("#qr-login-message");
   const qr2faButton = $("#qr-2fa-submit");
   let qrPollTimer = null;
+  let qrAttempt = 0;
 
   function setLoginMode(mode) {
     telegramLoginForm.dataset.mode = mode;
     const waitingForCode = mode === "complete-login";
+    $("#telegram-login-title").textContent = waitingForCode ? "введите код" : "вход в Telegram";
+    $("#telegram-login-description").textContent = waitingForCode
+      ? "Код отправлен в Telegram. Введите его ниже."
+      : "Укажите номер телефона. Код придёт в официальное приложение Telegram.";
     phoneInput.disabled = waitingForCode;
     codeInput.disabled = !waitingForCode;
     codeField.classList.toggle("unlocked", waitingForCode);
@@ -255,9 +301,10 @@ if (telegramLoginForm) {
     }
   });
 
-  async function pollQrLogin() {
+  async function pollQrLogin(attempt) {
     try {
       const result = await api("/api/setup/qr-login");
+      if (attempt !== qrAttempt) return;
       qrMessage.textContent = result.message || "Ожидаем подтверждение…";
       if (result.state === "authorized") {
         clearTimeout(qrPollTimer);
@@ -267,6 +314,8 @@ if (telegramLoginForm) {
       if (result.state === "2fa_required") {
         clearTimeout(qrPollTimer);
         qr2faButton.hidden = false;
+        telegramLoginForm.hidden = false;
+        telegramLoginForm.classList.add("qr-password-only");
         passwordInput.focus();
         message(
           telegramLoginForm,
@@ -275,18 +324,25 @@ if (telegramLoginForm) {
         );
         return;
       }
-      if (["expired", "failed"].includes(result.state)) return;
-      qrPollTimer = setTimeout(pollQrLogin, 1200);
+      if (["expired", "failed"].includes(result.state)) {
+        $("#refresh-qr-login").hidden = false;
+        return;
+      }
+      qrPollTimer = setTimeout(() => pollQrLogin(attempt), 1200);
     } catch (error) {
+      if (attempt !== qrAttempt) return;
       qrMessage.textContent = error.message;
+      $("#refresh-qr-login").hidden = false;
     }
   }
 
   startQrButton.addEventListener("click", async () => {
+    const attempt = ++qrAttempt;
     startQrButton.disabled = true;
     clearTimeout(qrPollTimer);
     try {
       const result = await api("/api/setup/qr-login", { method: "POST" });
+      if (attempt !== qrAttempt) return;
       if (result.state === "authorized") {
         showOnboardingStep("success");
         return;
@@ -295,12 +351,34 @@ if (telegramLoginForm) {
       qrMessage.textContent = result.message;
       qr2faButton.hidden = true;
       qrPanel.hidden = false;
-      qrPollTimer = setTimeout(pollQrLogin, 500);
+      telegramLoginForm.hidden = true;
+      $("#qr-actions").hidden = false;
+      $("#refresh-qr-login").hidden = true;
+      $("#telegram-login-title").textContent = "войти по QR";
+      $("#telegram-login-description").textContent = "Откройте Telegram → Настройки → Устройства → Подключить устройство.";
+      qrPollTimer = setTimeout(() => pollQrLogin(attempt), 500);
     } catch (error) {
+      if (attempt !== qrAttempt) return;
       message(telegramLoginForm, error.message, true);
+      if (!qrPanel.hidden) {
+        qrMessage.textContent = error.message;
+        $("#refresh-qr-login").hidden = false;
+      }
     } finally {
       startQrButton.disabled = false;
     }
+  });
+
+  $("#refresh-qr-login").addEventListener("click", () => startQrButton.click());
+  $("#back-to-phone").addEventListener("click", () => {
+    qrAttempt += 1;
+    clearTimeout(qrPollTimer);
+    qrPanel.hidden = true;
+    $("#qr-actions").hidden = true;
+    telegramLoginForm.hidden = false;
+    telegramLoginForm.classList.remove("qr-password-only");
+    setLoginMode("request-code");
+    phoneInput.focus();
   });
 
   qr2faButton.addEventListener("click", async () => {
@@ -331,26 +409,11 @@ if (parseForm) {
   const confirmOverlay = $("#parse-confirm-overlay");
   const confirmStartButton = $("#parse-confirm-start");
   const confirmCancelButton = $("#parse-confirm-cancel");
-  const allMediaToggle = $("#download-media");
   const mediaTypeOptions = $("#media-type-options");
   const mediaTypeToggles = $$('[data-media-type]', mediaTypeOptions);
   const mediaSelectionNote = $("#media-selection-note");
 
   function updateMediaSelection() {
-    if (!allMediaToggle.checked && mediaTypeToggles.every((item) => item.checked)) {
-      allMediaToggle.checked = true;
-    }
-    if (allMediaToggle.checked) {
-      mediaTypeToggles.forEach((item) => {
-        item.checked = false;
-        item.disabled = true;
-      });
-      mediaTypeOptions.classList.add("locked");
-      mediaSelectionNote.textContent = "Будут скачаны все типы медиа.";
-      return;
-    }
-    mediaTypeOptions.classList.remove("locked");
-    mediaTypeToggles.forEach((item) => { item.disabled = false; });
     const selectedLabels = mediaTypeToggles
       .filter((item) => item.checked)
       .map((item) => item.dataset.label);
@@ -359,7 +422,6 @@ if (parseForm) {
       : "Медиа скачиваться не будут.";
   }
 
-  allMediaToggle.addEventListener("change", updateMediaSelection);
   mediaTypeToggles.forEach((item) => {
     item.addEventListener("change", updateMediaSelection);
   });
@@ -382,6 +444,7 @@ if (parseForm) {
         confirmCancelButton.removeEventListener("click", cancel);
         confirmOverlay.removeEventListener("click", cancelFromBackdrop);
         document.removeEventListener("keydown", cancelFromKeyboard);
+        urlInput.focus();
         resolve(accepted);
       };
       const accept = () => finish(true);
@@ -422,7 +485,7 @@ if (parseForm) {
       const payload = {
         url: urlInput.value,
         limit: rawLimit ? Number(rawLimit) : null,
-        download_media: allMediaToggle.checked,
+        download_media: false,
         media_types: mediaTypeToggles
           .filter((item) => item.checked)
           .map((item) => item.value),
@@ -544,11 +607,17 @@ bindJsonForm("#storage-form", "/api/settings/storage", (data) => ({
   save_dir: data.get("save_dir"),
 }), (result) => {
   const path = $("#settings-storage-path");
-  if (path) path.textContent = result.save_dir;
+  if (path) { path.value = result.save_dir; path.readOnly = true; }
   showToast("Папка сохранена");
 });
 
 let privateSettings = null;
+$("#edit-storage")?.addEventListener("click", () => {
+  const input = $("#settings-storage-path");
+  input.readOnly = false;
+  input.focus();
+  input.select();
+});
 let allSecretsVisible = false;
 
 function secretValue(data, key) {
@@ -572,6 +641,8 @@ function hideSecretRow(row) {
   const lengths = { api_hash: 16, phone: 10 };
   row.querySelector(".secret-content").textContent = "•".repeat(lengths[row.dataset.secretKey] || 8);
   row.classList.remove("revealed");
+  row.setAttribute("aria-expanded", "false");
+  row.querySelector(".secret-action").textContent = "ПОКАЗАТЬ";
 }
 
 async function revealSecretRow(row) {
@@ -579,6 +650,8 @@ async function revealSecretRow(row) {
     const data = await getPrivateSettings();
     row.querySelector(".secret-content").textContent = secretValue(data, row.dataset.secretKey);
     row.classList.add("revealed");
+    row.setAttribute("aria-expanded", "true");
+    row.querySelector(".secret-action").textContent = "СКРЫТЬ";
   } catch (error) {
     $("#secrets-message").textContent = error.message;
     $("#secrets-message").classList.add("error-text");
@@ -627,9 +700,13 @@ $$("[data-copy-target]").forEach((button) => {
 const resetButton = $("#reset-session");
 if (resetButton) {
   resetButton.addEventListener("click", async () => {
-    if (!confirm(
-      "Отозвать этот вход в Telegram и удалить локальную session, api_id, api_hash, телефон и профиль? История парсинга и результаты останутся.",
-    )) return;
+    const dialog = $("#reset-dialog");
+    dialog.returnValue = "cancel";
+    const confirmed = new Promise((resolve) => {
+      dialog.addEventListener("close", () => resolve(dialog.returnValue === "confirm"), { once: true });
+    });
+    dialog.showModal();
+    if (!await confirmed) return;
     resetButton.disabled = true;
     try {
       const result = await api("/api/setup/reset", {
@@ -729,3 +806,19 @@ if (onboarding && !onboarding.hidden) {
 }
 loadStatus();
 pollRun();
+
+// Keep keyboard navigation inside an open overlay.
+document.addEventListener("keydown", (event) => {
+  if (event.key !== "Tab") return;
+  const overlay = $(".confirmation-overlay:not([hidden]), .onboarding-overlay:not([hidden])");
+  if (!overlay) return;
+  const controls = $$("a[href], button:not(:disabled), input:not(:disabled):not([type=hidden]), [tabindex='0']", overlay)
+    .filter((node) => node.getClientRects().length);
+  if (!controls.length) return;
+  const first = controls[0], last = controls.at(-1);
+  if (event.shiftKey && (document.activeElement === first || !overlay.contains(document.activeElement))) {
+    event.preventDefault(); last.focus();
+  } else if (!event.shiftKey && (document.activeElement === last || !overlay.contains(document.activeElement))) {
+    event.preventDefault(); first.focus();
+  }
+});

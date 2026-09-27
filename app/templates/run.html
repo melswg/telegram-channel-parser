@@ -3,17 +3,17 @@
 {% block content %}
 <section class="detail-head" data-run-id="{{ run.id }}" data-run-status="{{ run.status }}">
   <div>
-    <a class="back-link" href="/">← Назад</a>
+    <a class="back-link" href="/">← к парсингу</a>
     <span class="eyebrow">PARSE RUN #{{ run.id }}</span>
-    <h1>@{{ run.channel }}</h1>
+    <h1>импорт @{{ run.channel }}</h1>
     <p>{{ run.source_url }}</p>
   </div>
   <div class="export-panel">
-    <label class="media-export-toggle"><input type="checkbox" data-export-media><span>Включить media</span></label>
     <div class="export-buttons">
-      <a data-export-link href="/api/export/run/{{ run.id }}?format=json">JSON</a>
-      <a data-export-link href="/api/export/run/{{ run.id }}?format=jsonl">JSONL</a>
+      <a data-export-link href="/api/export/run/{{ run.id }}?format=json">скачать JSON</a>
+      <a data-export-link href="/api/export/run/{{ run.id }}?format=jsonl">скачать JSONL</a>
     </div>
+    <label class="media-export-toggle"><input type="checkbox" data-export-media><span>Включить media</span></label>
     <small>Скачать результат можно в процессе парсинга.</small>
     <small>С media будет скачан ZIP: данные и папка <code>media</code>.</small>
     <p class="export-message form-message"></p>
@@ -37,22 +37,19 @@
     <div><strong id="run-media">{{ run.media_files_count or 0 }}</strong><span>media-файлов</span></div>
     <div><strong>{{ run.target_type }}</strong><span>тип цели</span></div>
   </div>
-  {% if run.download_media or run.media_types %}
-  <p class="media-ready-note">Медиа: {{ run.media_selection }}. Файлы загружаются в папку <code>media</code> каждого поста. Не все Telegram media обязательно содержат скачиваемый файл.</p>
-  {% endif %}
   <p id="run-error" class="error-text">{{ run.error }}</p>
 </article>
 <section class="section-block">
-  <div class="section-heading"><div><span class="eyebrow">RESULTS</span><h2>Обработанные посты</h2></div></div>
+  <div class="section-heading"><div><h2>Обработанные посты</h2></div></div>
   <div id="run-post-list" class="run-list">
     {% for post in run.posts %}
     {% if post.error %}
     <div class="run-row error-row"><span class="run-icon">!</span><span class="run-main"><strong>Telegram ID #{{ post.post_id }}</strong><small>{{ post.error }}</small></span></div>
     {% else %}
     <a class="run-row" href="/posts/{{ post.channel }}/{{ post.post_id }}">
-      <span class="run-icon">P</span>
+      <span class="run-icon">{{ '%02d'|format(loop.index) }}</span>
       <span class="run-main"><strong>{{ post|publication_label }}</strong><small>{{ post.date|post_date }} · Telegram ID #{{ post.post_id }} · {{ (post|post_preview)[:100] }}</small></span>
-      <span class="run-count">{{ post.comments_count }} комментариев</span><span class="row-arrow">›</span>
+      <span class="run-count">{{ post.comments_count }} комментариев</span><span class="status-badge">обработан</span><span class="row-arrow" aria-hidden="true">→</span>
     </a>
     {% endif %}
     {% else %}

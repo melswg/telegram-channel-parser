@@ -14,8 +14,8 @@ class WebParseDefaultsTests(unittest.TestCase):
             Path(__file__).parents[1] / "app" / "templates" / "index.html"
         ).read_text(encoding="utf-8")
 
-        self.assertIn('for="parse-limit">Количество постов</label>', template)
-        self.assertIn('placeholder="Все доступные"', template)
+        self.assertIn('for="parse-limit">Количество постов. Пустое поле — все доступные посты.</label>', template)
+        self.assertIn('placeholder="50"', template)
         self.assertNotIn('id="parse-limit" name="limit" type="number" min="1" value=', template)
 
     def test_parser_form_offers_every_media_category(self):

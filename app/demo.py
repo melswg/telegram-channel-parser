@@ -59,6 +59,7 @@ def _media(filename: str, color_a: str, color_b: str, title: str) -> dict:
         "mime_type": "image/svg+xml",
         "downloaded": True,
         "filename": filename,
+        "path": f"media/{filename}",
         "demo_colors": [color_a, color_b],
         "demo_title": title,
     }

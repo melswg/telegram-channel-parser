@@ -930,14 +930,17 @@ async def build_export_file(
     safe_name = re.sub(r"[^A-Za-z0-9_.-]", "_", filename)
     token = uuid.uuid4().hex
     path = EXPORT_DIR / f"{token}.zip"
-    settings = LocalSettings.load_effective()
     async with export_lock:
         try:
+            save_dir = (
+                DEMO_SAVE_DIR if DEMO_MODE else
+                validate_save_dir(LocalSettings.load_effective().save_dir, create=False)
+            )
             media_type, media_count, size_bytes = await asyncio.to_thread(
                 write_export_archive,
                 posts,
                 format,
-                validate_save_dir(settings.save_dir, create=False),
+                save_dir,
                 path,
             )
         except ValueError as exc:

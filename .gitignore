@@ -27,6 +27,9 @@ data/parsed/
 data/exports/
 data/media/
 
+# Local Figma generation workspace
+design-output/
+
 # OS/editor
 .DS_Store
 .vscode/
