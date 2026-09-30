@@ -4,10 +4,9 @@
 {% block content %}
 <section class="detail-head post-detail-head">
   <div>
-    <a class="back-link" href="{{ back_url }}">{{ back_label }}</a>
-    <span class="eyebrow">@{{ post.channel }} · {{ post|publication_label }} · TELEGRAM ID #{{ post.post_id }}</span>
-    <h1>{{ post|publication_label }}</h1>
-    <p>@{{ post.channel }} · {{ post.date|post_date }}{% if post.views is not none %} · {{ post.views }} просмотров{% endif %}</p>
+    <a class="back-link" href="{{ back_url }}">{% if back_url == '/' %}/ назад к парсингу{% else %}/ к постам канала{% endif %}</a>
+    <h1>публикация{% if post.publication_number %} / {{ post.publication_number }}{% endif %}</h1>
+    <p>@{{ post.channel }} / {{ post.date|post_date|replace(', ', ' / ') }}</p>
   </div>
   <div class="export-panel post-export-panel">
     <div class="export-buttons">
@@ -22,8 +21,7 @@
 </section>
 <article class="post-detail">
   <div class="post-copy">{{ post.text or "Пост без текстовой части." }}</div>
-  {{ viewer(post.media, post.channel, post.post_id, post.media_type or "Media поста") }}
-  <a class="text-link" href="https://t.me/{{ post.channel }}/{{ post.post_id }}" target="_blank" rel="noreferrer">открыть оригинал в Telegram</a>
+  {{ viewer(post.media, post.channel, post.post_id, post.media_type or "Media поста", "https://t.me/" ~ post.channel ~ "/" ~ post.post_id) }}
 </article>
 <section class="thread-section">
   <div class="section-heading"><h2>комментарии · {{ post.comments_count }}</h2></div>

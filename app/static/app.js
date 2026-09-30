@@ -74,6 +74,118 @@ $$('.media-audio-toggle').forEach((button) => {
   });
 });
 
+// Media stays a real downloadable file. Only the on-page preview is reduced to
+// the site's two-color bitmap language, so the original never loses detail.
+const BITMAP_RED = [228, 40, 39];
+const BITMAP_PAPER = [238, 238, 238];
+const BITMAP_MATRIX = [
+  [0, 8, 2, 10],
+  [12, 4, 14, 6],
+  [3, 11, 1, 9],
+  [15, 7, 13, 5],
+];
+
+function renderBitmapPreview(source, canvas) {
+  const sourceWidth = source.naturalWidth || source.videoWidth;
+  const sourceHeight = source.naturalHeight || source.videoHeight;
+  if (!sourceWidth || !sourceHeight) return false;
+
+  const bitmapWidth = Math.min(360, sourceWidth);
+  const bitmapHeight = Math.max(1, Math.round(bitmapWidth * sourceHeight / sourceWidth));
+  canvas.width = bitmapWidth;
+  canvas.height = bitmapHeight;
+  const context = canvas.getContext('2d', { willReadFrequently: true });
+  if (!context) return false;
+
+  context.drawImage(source, 0, 0, bitmapWidth, bitmapHeight);
+  const pixels = context.getImageData(0, 0, bitmapWidth, bitmapHeight);
+  const data = pixels.data;
+  for (let y = 0; y < bitmapHeight; y += 1) {
+    for (let x = 0; x < bitmapWidth; x += 1) {
+      const offset = (y * bitmapWidth + x) * 4;
+      const alpha = data[offset + 3];
+      const luminance = data[offset] * .2126 + data[offset + 1] * .7152 + data[offset + 2] * .0722;
+      const dither = (BITMAP_MATRIX[y % 4][x % 4] - 7.5) * 4;
+      const color = alpha > 12 && luminance + dither < 166 ? BITMAP_RED : BITMAP_PAPER;
+      data[offset] = color[0];
+      data[offset + 1] = color[1];
+      data[offset + 2] = color[2];
+      data[offset + 3] = 255;
+    }
+  }
+  context.putImageData(pixels, 0, 0);
+  canvas.closest('.media-bitmap-frame')?.classList.add('is-bitmap-ready');
+  return true;
+}
+
+function whenVisible(node, callback) {
+  if (!('IntersectionObserver' in window)) {
+    callback();
+    return;
+  }
+  const observer = new IntersectionObserver((entries) => {
+    if (!entries.some((entry) => entry.isIntersecting)) return;
+    observer.disconnect();
+    callback();
+  }, { rootMargin: '240px' });
+  observer.observe(node);
+}
+
+$$('.media-bitmap-source').forEach((image) => {
+  const canvas = $('.media-bitmap-preview', image.closest('.media-bitmap-frame'));
+  if (!canvas) return;
+  whenVisible(image, () => {
+    const render = () => {
+      try { renderBitmapPreview(image, canvas); } catch { /* keep the original visible */ }
+    };
+    if (image.complete && image.naturalWidth) render();
+    else image.addEventListener('load', render, { once: true });
+  });
+});
+
+$$('.media-video-block').forEach((block) => {
+  const frame = $('.media-video-frame', block);
+  const video = $('.media-video-source', block);
+  const canvas = $('.media-bitmap-preview', block);
+  const button = $('.media-video-toggle', block);
+  if (!frame || !video || !canvas || !button) return;
+
+  whenVisible(frame, () => {
+    const capture = () => {
+      try { renderBitmapPreview(video, canvas); } catch { /* native video remains available */ }
+    };
+    const chooseFrame = () => {
+      if (Number.isFinite(video.duration) && video.duration > .2) {
+        video.currentTime = Math.min(.35, video.duration / 4);
+        video.addEventListener('seeked', capture, { once: true });
+      } else {
+        capture();
+      }
+    };
+    if (video.readyState >= 2) chooseFrame();
+    else video.addEventListener('loadeddata', chooseFrame, { once: true });
+  });
+
+  button.addEventListener('click', async () => {
+    if (video.paused) {
+      frame.classList.add('is-playing');
+      try {
+        await video.play();
+        button.textContent = '( пауза )';
+      } catch {
+        button.textContent = '( открыть файл не удалось )';
+      }
+    } else {
+      video.pause();
+      button.textContent = '( воспроизвести )';
+    }
+  });
+  video.addEventListener('ended', () => {
+    frame.classList.remove('is-playing');
+    button.textContent = '( воспроизвести )';
+  });
+});
+
 async function api(path, options = {}) {
   let response;
   try {
