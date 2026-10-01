@@ -1,7 +1,10 @@
+{% from "_development.html" import placeholder with context %}
 {% macro viewer(media, channel, post_id, label="Media", original_url=None) %}
   {% if media %}
     {% set media_kind = "Голосовое" if media.type == "voice" else ((media.type or label)|media_type_label) %}
-    {% if media.downloaded and media.filename %}
+    {% if media.type == "paid_media" %}
+      {{ placeholder("Медиа за Stars") }}
+    {% elif media.downloaded and media.filename %}
       {% set media_url = url_for("serve_media", channel=channel, post_id=post_id, filename=media.filename) %}
       {% set mime = media.get("mime_type", "") %}
       <figure class="media-viewer media-viewer-{{ media.type or 'file' }}">

@@ -1,0 +1,9 @@
+{% macro placeholder(label) %}
+<section class="development-placeholder" aria-label="{{ label }} — В разработке">
+  <img src="{{ url_for('static', path='/assets/in-development.png') }}" alt="" aria-hidden="true">
+  <div class="development-placeholder-caption">
+    <strong>В разработке</strong>
+    <span>{{ label }}</span>
+  </div>
+</section>
+{% endmacro %}

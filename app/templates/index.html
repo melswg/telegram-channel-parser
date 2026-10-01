@@ -1,4 +1,5 @@
 {% extends "base.html" %}
+{% from "_development.html" import placeholder with context %}
 {% block title %}Парсинг · Telegram Importer{% endblock %}
 {% block content %}
 <section class="hero">
@@ -41,6 +42,7 @@
           <small id="media-selection-note">Медиа скачиваться не будут.</small>
         </div>
       </div>
+      {{ placeholder("Отключение комментариев") }}
       <p class="media-hint">Файлы сохранятся в папке <code>media</code> рядом с JSON.</p>
       <button class="primary-button" type="submit">
         <span>спарсить</span>
