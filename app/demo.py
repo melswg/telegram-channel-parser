@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import json
 import os
+import shutil
 from pathlib import Path
 
 from .db import Database
@@ -53,15 +54,24 @@ def demo_private_settings() -> dict:
     }
 
 
-def _media(filename: str, color_a: str, color_b: str, title: str) -> dict:
+def _media(
+    filename: str,
+    color_a: str,
+    color_b: str,
+    title: str,
+    *,
+    mime_type: str = "image/svg+xml",
+    demo_asset: str | None = None,
+) -> dict:
     return {
         "type": "photo",
-        "mime_type": "image/svg+xml",
+        "mime_type": mime_type,
         "downloaded": True,
         "filename": filename,
         "path": f"media/{filename}",
         "demo_colors": [color_a, color_b],
         "demo_title": title,
+        "demo_asset": demo_asset,
     }
 
 
@@ -73,11 +83,19 @@ POSTS = [
         "publication_number": 318,
         "date": "2026-08-15T17:40:00+03:00",
         "text": "Разбираем пять приёмов, которые делают сложный интерфейс спокойнее: ритм, контраст, воздух, понятные состояния и один главный акцент.",
+        "card_preview": "пять приёмов спокойного интерфейса",
         "views": 18_420,
         "forwards": 137,
         "has_media": True,
         "media_type": "photo",
-        "media": _media("calm-interface.svg", "#7c6cff", "#35d6ae", "CALM INTERFACE"),
+        "media": _media(
+            "calm-interface.png",
+            "#e42827",
+            "#eeeeee",
+            "CALM INTERFACE",
+            mime_type="image/png",
+            demo_asset="figma-post-318.png",
+        ),
         "comments": [
             {
                 "id": 701,
@@ -90,22 +108,19 @@ POSTS = [
             {
                 "id": 702,
                 "date": "2026-08-15T18:03:00+03:00",
-                "text": "А можно следующим постом показать это на мобильном экране?",
+                "text": "Согласен. Ещё помогает единая шкала отступов для всех экранов.",
                 "sender_id": 302,
-                "sender_username": "max_product",
-                "sender_name": "Максим",
+                "sender_username": "mikhail_design",
+                "sender_name": "Михаил",
                 "reply_to": 701,
             },
             {
                 "id": 703,
                 "date": "2026-08-15T18:12:00+03:00",
-                "text": "Добавила небольшой визуальный пример.",
+                "text": "Сохранила для следующего проекта. Спасибо!",
                 "sender_id": 303,
-                "sender_username": "lena_frames",
+                "sender_username": "elena",
                 "sender_name": "Елена",
-                "has_media": True,
-                "media_type": "photo",
-                "media": _media("comment-example.svg", "#ff7897", "#856dff", "UI EXAMPLE"),
             },
         ],
     },
@@ -116,6 +131,7 @@ POSTS = [
         "publication_number": 94,
         "date": "2026-08-14T12:15:00+03:00",
         "text": "Чек-лист перед передачей макета разработчику: состояния, пустые экраны, длинный текст, ошибки и адаптив.",
+        "card_preview": "как мы собираем дизайн-систему",
         "views": 9_830,
         "forwards": 82,
         "has_media": False,
@@ -137,6 +153,7 @@ POSTS = [
         "publication_number": 317,
         "date": "2026-08-12T19:05:00+03:00",
         "text": "Новая подборка: тёмные дашборды, где данные остаются читаемыми, а декоративные эффекты не мешают работе.",
+        "card_preview": "цвет и типографика",
         "views": 21_560,
         "forwards": 204,
         "has_media": True,
@@ -289,12 +306,19 @@ def seed_demo_data(db: Database, save_dir: Path = DEMO_SAVE_DIR) -> None:
                 save_dir / payload["channel"] / str(payload["post_id"])
                 / "media" / media["filename"]
             )
-            _write_demo_svg(
-                media_path,
-                media["demo_colors"][0],
-                media["demo_colors"][1],
-                media["demo_title"],
-            )
+            media_path.parent.mkdir(parents=True, exist_ok=True)
+            if media.get("demo_asset"):
+                shutil.copyfile(
+                    PROJECT_ROOT / "app" / "static" / "assets" / media["demo_asset"],
+                    media_path,
+                )
+            else:
+                _write_demo_svg(
+                    media_path,
+                    media["demo_colors"][0],
+                    media["demo_colors"][1],
+                    media["demo_title"],
+                )
             payload["media_directory"] = str(media_path.parent)
         payload["url"] = f"https://t.me/{payload['channel']}/{payload['post_id']}"
         payload["media_download_requested"] = bool(media)

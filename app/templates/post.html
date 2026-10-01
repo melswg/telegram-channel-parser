@@ -24,16 +24,16 @@
   {{ viewer(post.media, post.channel, post.post_id, post.media_type or "Media поста", "https://t.me/" ~ post.channel ~ "/" ~ post.post_id) }}
 </article>
 <section class="thread-section">
-  <div class="section-heading"><h2>комментарии · {{ post.comments_count }}</h2></div>
+  <div class="section-heading"><h2>комментарии / {{ post.comments_count }}</h2></div>
   <div class="thread">
     {% for comment in post.comments %}
     <article class="comment-card">
       <div class="comment-body">
         <div class="comment-head">
           <strong>{{ ("@" ~ comment.sender_username) if comment.sender_username else (comment.sender_name or "Удалённый пользователь") }}</strong>
-          <time datetime="{{ comment.date }}">{{ comment.date|post_date }}</time>
+          <time datetime="{{ comment.date }}">{{ comment.date|comment_date }}</time>
         </div>
-        {% if comment.reply_to_comment_id %}<span class="reply-badge">↳ ответ на комментарий #{{ comment.reply_to_comment_id }}</span>{% endif %}
+        {% if comment.reply_to_comment_id %}<span class="reply-badge">/ ответ на комментарий {% if comment.reply_to_username %}@{{ comment.reply_to_username }}{% else %}#{{ comment.reply_to_comment_id }}{% endif %}</span>{% endif %}
         <p>{{ comment.text or "Комментарий без текста" }}</p>
         {{ viewer(comment.media, post.channel, post.post_id, comment.media_type or "Media комментария") }}
       </div>

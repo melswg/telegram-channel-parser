@@ -83,10 +83,9 @@
     {% for run in runs %}
     <a class="run-row" href="/runs/{{ run.id }}">
       <span class="run-icon">{{ run.id }}</span>
-      <span class="run-main"><strong>@{{ run.channel }}</strong><small>{{ run.source_url }}</small></span>
+      <span class="run-main"><strong>@{{ run.channel }}</strong></span>
       <span class="run-count">{{ run.posts_count }} пост. · {{ run.comments_count }} комм.</span>
       <span class="status-badge status-{{ run.status }}">{{ {'queued': 'в очереди', 'running': 'в процессе', 'paused': 'пауза', 'success': 'завершён', 'partial': 'частично', 'failed': 'ошибка'}.get(run.status, run.status) }}</span>
-      <span class="row-arrow" aria-hidden="true">→</span>
     </a>
     {% else %}
     <div class="empty-state"><strong>История пока пуста</strong><span>Первый импорт появится здесь.</span></div>
@@ -100,10 +99,10 @@
   <div class="post-grid">
     {% for post in posts[:3] %}
     <a class="mini-post" href="/posts/{{ post.channel }}/{{ post.post_id }}">
-      <span class="badge">@{{ post.channel }}</span>
-      <h3>{{ post|publication_label }}</h3>
-      <p>{{ (post|post_preview)[:110] }}{% if (post|post_preview)|length > 110 %}…{% endif %}</p>
-      <small>{{ post.date|post_date }} · {{ post.comments_count }} комментариев</small>
+      <span class="badge">@{{ post.channel }} / {{ post.date|comment_date }} / {{ post.comments_count }} комментариев</span>
+      <h3>публикация / {{ post.publication_number or post.post_id }}</h3>
+      {% set preview = post.card_preview or (post|post_preview) %}
+      <p>{{ preview[:110] }}{% if preview|length > 110 %}…{% endif %}</p>
     </a>
     {% endfor %}
   </div>
@@ -117,14 +116,6 @@
   {% if not onboarding_required %}hidden{% endif %}
 >
   <section class="onboarding-dialog" role="dialog" aria-modal="true" aria-labelledby="onboarding-title">
-    <div class="onboarding-brand">
-      <span class="brand-mark">T</span>
-      <div>
-        <strong>Первичная настройка</strong>
-        <small>Локальное подключение вашего Telegram</small>
-      </div>
-    </div>
-
     <div class="onboarding-progress" aria-label="Прогресс подключения">
       <span id="onboarding-progress-label">parser / подключение / 01 из 02</span>
       <span data-progress-step="credentials">Данные приложения</span>
@@ -135,10 +126,7 @@
     <div class="onboarding-panel" data-onboarding-panel="credentials">
       <h2 id="onboarding-title">данные приложения</h2>
       <p>Нужны ваши личные <code>api_id</code> и <code>api_hash</code>. Мы проверим их через Telegram и сохраним только на этом компьютере.</p>
-      <a class="guide-download" href="/downloads/telegram-api-setup.md" download>
-        <span>↓</span>
-        <span><strong>Скачать инструкцию .md</strong><small>Как получить api_id и api_hash на my.telegram.org</small></span>
-      </a>
+      <a class="guide-download" href="/downloads/telegram-api-setup.md" download>скачать инструкцию .md</a>
       <form id="credentials-form">
         <label>api_id<input name="api_id" type="number" min="1" inputmode="numeric" placeholder="12345678" required><small>Числовой идентификатор приложения</small></label>
         <label>api_hash<input name="api_hash" type="password" autocomplete="new-password" placeholder="32 символа" required><small>32 символа из my.telegram.org</small></label>
@@ -146,7 +134,6 @@
         <button class="primary-button onboarding-primary" type="submit">Продолжить <b>→</b></button>
         <p class="form-message"></p>
       </form>
-      <p class="privacy-line">Credentials не отправляются автору проекта или на сторонний сервер.</p>
     </div>
 
     <div class="onboarding-panel" data-onboarding-panel="telegram" hidden>
@@ -163,8 +150,8 @@
           <span class="login-button-label">Проверить и отправить код</span><b>→</b>
         </button>
         <div class="login-alternatives">
-          <button id="resend-code" class="secondary-button" type="button" hidden>Запросить другой способ</button>
-          <button id="change-phone" class="secondary-button" type="button" hidden>Изменить номер</button>
+          <button id="resend-code" class="secondary-button" type="button" hidden>другой способ</button>
+          <button id="change-phone" class="secondary-button" type="button" hidden>изменить номер</button>
           <button id="start-qr-login" class="secondary-button" type="button">Войти по QR без кода</button>
         </div>
         <p class="form-message"></p>
@@ -181,7 +168,6 @@
         <button id="refresh-qr-login" class="secondary-button" type="button" hidden>обновить QR-код</button>
         <button id="back-to-phone" class="secondary-button" type="button">вернуться к входу по телефону</button>
       </div>
-      <p class="privacy-line">Код и пароль 2FA используются только для входа и никогда не сохраняются.</p>
     </div>
 
     <div class="onboarding-panel onboarding-success" data-onboarding-panel="success" hidden>

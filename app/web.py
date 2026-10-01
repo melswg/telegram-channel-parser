@@ -72,6 +72,17 @@ def format_post_date(value: str | None) -> str:
     return parsed.strftime("%d.%m.%Y, %H:%M")
 
 
+def format_comment_date(value: str | None) -> str:
+    """Compact date used by the current Figma comment rows."""
+    if not value:
+        return "дата неизвестна"
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except (TypeError, ValueError):
+        return str(value)
+    return parsed.strftime("%d.%m.%y")
+
+
 def publication_label(post: dict) -> str:
     number = post.get("publication_number")
     if number:
@@ -216,6 +227,7 @@ def resolve_media_path(
 
 
 templates.env.filters["post_date"] = format_post_date
+templates.env.filters["comment_date"] = format_comment_date
 templates.env.filters["publication_label"] = publication_label
 templates.env.filters["post_preview"] = post_preview
 templates.env.filters["media_duration"] = format_media_duration
@@ -476,6 +488,15 @@ async def post_page(request: Request, channel: str, post_id: int):
         db.close()
     if not post:
         raise HTTPException(status_code=404, detail="Пост не найден в локальной истории.")
+    comment_users = {
+        comment.get("comment_id"): comment.get("sender_username")
+        for comment in post.get("comments", [])
+        if comment.get("comment_id") and comment.get("sender_username")
+    }
+    for comment in post.get("comments", []):
+        comment["reply_to_username"] = comment_users.get(
+            comment.get("reply_to_comment_id")
+        )
     back_url, back_label = post_back_target(post, run)
     return templates.TemplateResponse(
         request=request,

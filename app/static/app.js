@@ -90,14 +90,39 @@ function renderBitmapPreview(source, canvas) {
   const sourceHeight = source.naturalHeight || source.videoHeight;
   if (!sourceWidth || !sourceHeight) return false;
 
-  const bitmapWidth = Math.min(360, sourceWidth);
-  const bitmapHeight = Math.max(1, Math.round(bitmapWidth * sourceHeight / sourceWidth));
+  const frame = canvas.closest('.media-bitmap-frame');
+  const isPhoto = frame?.closest('.media-viewer-photo,.media-viewer-image');
+  const bitmapWidth = isPhoto ? 269 : Math.min(360, sourceWidth);
+  const bitmapHeight = isPhoto
+    ? 225
+    : Math.max(1, Math.round(bitmapWidth * sourceHeight / sourceWidth));
   canvas.width = bitmapWidth;
   canvas.height = bitmapHeight;
   const context = canvas.getContext('2d', { willReadFrequently: true });
   if (!context) return false;
 
-  context.drawImage(source, 0, 0, bitmapWidth, bitmapHeight);
+  if (isPhoto) {
+    const scale = Math.max(bitmapWidth / sourceWidth, bitmapHeight / sourceHeight);
+    const cropWidth = bitmapWidth / scale;
+    const cropHeight = bitmapHeight / scale;
+    context.drawImage(
+      source,
+      (sourceWidth - cropWidth) / 2,
+      (sourceHeight - cropHeight) / 2,
+      cropWidth,
+      cropHeight,
+      0,
+      0,
+      bitmapWidth,
+      bitmapHeight,
+    );
+  } else {
+    context.drawImage(source, 0, 0, bitmapWidth, bitmapHeight);
+  }
+  if (source.dataset?.preserveBitmap === 'true') {
+    canvas.closest('.media-bitmap-frame')?.classList.add('is-bitmap-ready');
+    return true;
+  }
   const pixels = context.getImageData(0, 0, bitmapWidth, bitmapHeight);
   const data = pixels.data;
   for (let y = 0; y < bitmapHeight; y += 1) {
@@ -325,14 +350,14 @@ if (telegramLoginForm) {
     const waitingForCode = mode === "complete-login";
     $("#telegram-login-title").textContent = waitingForCode ? "введите код" : "вход в Telegram";
     $("#telegram-login-description").textContent = waitingForCode
-      ? "Код отправлен в Telegram. Введите его ниже."
+      ? `Код отправлен в Telegram на ${maskPhone(phoneInput.value)}.`
       : "Укажите номер телефона. Код придёт в официальное приложение Telegram.";
     phoneInput.disabled = waitingForCode;
     codeInput.disabled = !waitingForCode;
     codeField.classList.toggle("unlocked", waitingForCode);
     codeField.classList.toggle("locked-field", !waitingForCode);
     buttonLabel.textContent = waitingForCode
-      ? "Завершить вход"
+      ? "Войти"
       : "Проверить и отправить код";
     changePhoneButton.hidden = !waitingForCode;
     resendCodeButton.hidden = !waitingForCode;
@@ -343,6 +368,13 @@ if (telegramLoginForm) {
       codeInput.value = "";
       codeInput.placeholder = "Сначала запросите код";
     }
+  }
+
+  function maskPhone(value) {
+    const digits = String(value || "").replace(/\D/g, "");
+    if (digits.length < 4) return "указанный номер";
+    const country = digits.startsWith("7") ? "+7" : "+" + digits.slice(0, 1);
+    return `${country} ••• ••-${digits.slice(-4, -2)}-${digits.slice(-2)}`;
   }
 
   telegramLoginForm.addEventListener("submit", async (event) => {
@@ -849,7 +881,7 @@ function renderRunState(run) {
   status.className = `status-badge status-${run.status}`;
   $("#run-progress-text").textContent = `${run.processed_posts} / ${run.total_posts} постов`;
   $("#run-progress").style.width = `${run.total_posts ? (run.processed_posts / run.total_posts) * 100 : 0}%`;
-  if ($("#run-eta")) $("#run-eta").textContent = run.estimated_wait_text;
+  if ($("#run-eta")) $("#run-eta").textContent = run.estimated_wait_text ? ` / ${run.estimated_wait_text}` : "";
   $("#run-posts").textContent = run.posts_count;
   $("#run-comments").textContent = run.comments_count;
   if ($("#run-media")) $("#run-media").textContent = run.media_files_count || 0;

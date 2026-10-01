@@ -31,9 +31,8 @@ class DemoExportTests(unittest.IsolatedAsyncioTestCase):
             ):
                 path, filename, count, size = await web.build_export_file(posts, "json", "demo")
             self.assertEqual(filename, "demo.zip")
-            self.assertEqual(count, 2)
+            self.assertEqual(count, 1)
             self.assertGreater(size, 0)
             with zipfile.ZipFile(path) as archive:
-                self.assertIn("media/design_digest/1042/calm-interface.svg", archive.namelist())
-                self.assertIn("media/design_digest/1042/comment-example.svg", archive.namelist())
+                self.assertIn("media/design_digest/1042/calm-interface.png", archive.namelist())
                 self.assertIn("data.json", archive.namelist())

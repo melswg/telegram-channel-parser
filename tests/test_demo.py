@@ -29,8 +29,8 @@ def test_seed_demo_data_is_repeatable(tmp_path: Path):
     assert len(posts) == 6
     assert detail is not None
     assert detail["comments_count"] == 3
-    assert detail["media"]["filename"] == "calm-interface.svg"
+    assert detail["media"]["filename"] == "calm-interface.png"
     assert (
         tmp_path / "data" / "design_digest" / "1042" / "media"
-        / "calm-interface.svg"
+        / "calm-interface.png"
     ).is_file()

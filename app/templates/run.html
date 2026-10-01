@@ -6,7 +6,6 @@
     <a class="back-link" href="/">← к парсингу</a>
     <span class="eyebrow">PARSE RUN #{{ run.id }}</span>
     <h1>импорт @{{ run.channel }}</h1>
-    <p>{{ run.source_url }}</p>
   </div>
   <div class="export-panel">
     <div class="export-buttons">
@@ -21,35 +20,34 @@
 </section>
 <article id="run-status-card" class="card run-status-card">
   <div class="run-status-top">
-    <span id="run-status" class="status-badge status-{{ run.status }}">{{ run.status }}</span>
+    <span id="run-status-summary"><span id="run-status" class="status-badge status-{{ run.status }}">{{ run.status }}</span><span id="run-eta">{% if run.estimated_wait_text %} / {{ run.estimated_wait_text }}{% endif %}</span></span>
     <span id="run-progress-text">{{ run.processed_posts }} / {{ run.total_posts }} постов</span>
   </div>
   <div class="progress-track"><i id="run-progress" style="width: {{ (run.processed_posts * 100 / run.total_posts) if run.total_posts else 0 }}%"></i></div>
-  <p id="run-eta" class="run-eta">{{ run.estimated_wait_text }}</p>
   <div class="run-controls">
     <button id="pause-run" class="secondary-button" type="button" {% if run.status not in ["queued", "running"] %}hidden{% endif %}>Пауза</button>
     <button id="resume-run" class="primary-button" type="button" {% if run.status != "paused" %}hidden{% endif %}>Продолжить</button>
     <span id="run-control-message"></span>
   </div>
   <div class="run-metrics">
-    <div><strong id="run-posts">{{ run.posts_count }}</strong><span>постов</span></div>
+    <div><strong id="run-posts">{{ run.posts_count }}</strong><span>поста</span></div>
     <div><strong id="run-comments">{{ run.comments_count }}</strong><span>комментариев</span></div>
-    <div><strong id="run-media">{{ run.media_files_count or 0 }}</strong><span>media-файлов</span></div>
-    <div><strong>{{ run.target_type }}</strong><span>тип цели</span></div>
+    <div><strong id="run-media">{{ run.media_files_count or 0 }}</strong><span>медиа-файла</span></div>
+    <div><strong>{{ {'channel': 'канал', 'post': 'пост'}.get(run.target_type, run.target_type) }}</strong><span>тип цели</span></div>
   </div>
   <p id="run-error" class="error-text">{{ run.error }}</p>
 </article>
 <section class="section-block">
-  <div class="section-heading"><div><h2>Обработанные посты</h2></div></div>
+  <div class="section-heading"><div><h2>(01) обработанные посты</h2></div></div>
   <div id="run-post-list" class="run-list">
     {% for post in run.posts %}
     {% if post.error %}
     <div class="run-row error-row"><span class="run-icon">!</span><span class="run-main"><strong>Telegram ID #{{ post.post_id }}</strong><small>{{ post.error }}</small></span></div>
     {% else %}
     <a class="run-row" href="/posts/{{ post.channel }}/{{ post.post_id }}">
-      <span class="run-icon">{{ '%02d'|format(loop.index) }}</span>
-      <span class="run-main"><strong>{{ post|publication_label }}</strong><small>{{ post.date|post_date }} · Telegram ID #{{ post.post_id }} · {{ (post|post_preview)[:100] }}</small></span>
-      <span class="run-count">{{ post.comments_count }} комментариев</span><span class="status-badge">обработан</span><span class="row-arrow" aria-hidden="true">→</span>
+      <span class="run-icon">({{ '%02d'|format(loop.index) }})</span>
+      <span class="run-main"><strong>публикация #{{ post.publication_number or post.post_id }}</strong></span>
+      <span class="run-count">{{ post.comments_count }} комментариев</span><span class="status-badge">обработан</span>
     </a>
     {% endif %}
     {% else %}

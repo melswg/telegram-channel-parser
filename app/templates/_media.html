@@ -28,7 +28,7 @@
         {% elif mime.startswith("image/") or media.type in ["photo", "image"] %}
           <strong class="media-kind-title">{{ media_kind }}</strong>
           <div class="media-bitmap-frame">
-            <img class="media-bitmap-source" src="{{ media_url }}" alt="{{ media_kind }}: {{ media.filename }}" loading="lazy" decoding="async">
+            <img class="media-bitmap-source" src="{{ media_url }}" alt="{{ media_kind }}: {{ media.filename }}" loading="lazy" decoding="async"{% if media.get("demo_asset") %} data-preserve-bitmap="true"{% endif %}>
             <canvas class="media-bitmap-preview" aria-hidden="true"></canvas>
           </div>
         {% else %}
@@ -48,9 +48,16 @@
       </figure>
     {% else %}
       <div class="media-unavailable">
+        {% if media.type in ["voice", "audio"] %}
         <strong class="media-kind-title">{{ media_kind }}</strong>
+        {% else %}
+        <strong class="media-kind-title">медиа не скачано</strong>
+        <span class="media-missing-type">{{ media_kind }}</span>
+        {% endif %}
         <span class="media-unavailable-action">( не скачано )</span>
+        {% if media.type in ["voice", "audio"] %}
         <span class="media-unavailable-track" aria-hidden="true"><i></i></span>
+        {% endif %}
         <small>{{ media.get("filename") or media_kind }}{% if media.get("duration") is not none %} · {{ media.get("duration")|media_duration }}{% endif %}</small>
       </div>
     {% endif %}

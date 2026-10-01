@@ -314,6 +314,7 @@ class Database:
             except (TypeError, ValueError):
                 raw_post = {}
             post["media"] = raw_post.get("media")
+            post["card_preview"] = raw_post.get("card_preview")
             result["posts"].append(post)
         result["observed_processed_posts"] = len(result["posts"])
         return result
@@ -465,6 +466,7 @@ class Database:
             except (TypeError, ValueError):
                 raw_post = {}
             post["media"] = raw_post.get("media")
+            post["card_preview"] = raw_post.get("card_preview")
             results.append(post)
         return results
 
